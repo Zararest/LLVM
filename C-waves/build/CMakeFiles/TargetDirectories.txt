@@ -1,0 +1,4 @@
+/home/uwu/Proga/LLVM-course/C-waves/build/CMakeFiles/rebuild_cache.dir
+/home/uwu/Proga/LLVM-course/C-waves/build/CMakeFiles/edit_cache.dir
+/home/uwu/Proga/LLVM-course/C-waves/build/CMakeFiles/Waves.dir
+/home/uwu/Proga/LLVM-course/C-waves/build/CMakeFiles/SDL2Test.dir
