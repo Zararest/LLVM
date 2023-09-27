@@ -1,1 +1,0 @@
-/usr/bin/cc    CMakeFiles/SDL2Test.dir/test.c.o  -o SDL2Test  -lSDL2 
