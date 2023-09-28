@@ -1,8 +1,14 @@
 #include "include/Driver.h"
 
-void processSim(size_t Height, size_t Width, size_t NumOfFrames, 
-                size_t Delay, EngineConfig Config) {
-  void *Handle = initWindow(Height, Width);
+#include <SDL.h>
+
+void processSim(size_t NumOfFrames, 
+                size_t Delay, SimConfig Config) {
+  void *Handle = initWindow(Config.Height, Config.Width);
+  Config.RenderHandle = SDL_CreateRenderer(Handle, -1, SDL_RENDERER_ACCELERATED);
+  SDL_SetRenderDrawColor(Config.RenderHandle, 0, 0, 0, 0);
+  SDL_RenderClear(Config.RenderHandle);
+
   Config.WindowHandle = Handle;
   for (size_t i = 0; i < NumOfFrames; ++i) {
     updateWindow(Config);
@@ -12,8 +18,10 @@ void processSim(size_t Height, size_t Width, size_t NumOfFrames,
 }
 
 int main(int Argc, char **Argv) {
-  EngineConfig Config = {0.1, NULL};
-  processSim(/*Height*/500, /*Width*/ 500, 
-             /*NumOfFrames*/ 30, /*Delay*/ 100, 
-             Config);
+  SimConfig Config = {/*dT*/ 0.1, 
+                      /*WindowHandle*/ NULL, 
+                      /*RenderHandle*/ NULL,
+                      /*Height*/ 500, 
+                      /*Width*/  500};
+  processSim(/*NumOfFrames*/ 30, /*Delay*/ 100, Config);
 }

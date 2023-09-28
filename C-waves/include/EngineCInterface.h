@@ -1,6 +1,9 @@
-typedef struct EngineConfig {
+typedef struct SimConfig {
   double dT;
   void *WindowHandle;
-} EngineConfig;  
+  void *RenderHandle;
+  size_t Height;
+  size_t Width;
+} SimConfig;  
 
-void configureFrame(EngineConfig Config);
+void configureFrame(SimConfig Config);
