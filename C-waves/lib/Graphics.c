@@ -3,6 +3,7 @@
 #include <SDL_timer.h>
 
 #include <assert.h>
+#include <math.h>
 
 #include "Driver.h"
 #include "GraphCInterface.h"
@@ -34,4 +35,8 @@ void setPixel(size_t X, size_t Y,
   SDL_Renderer *Renderer = SDL_GetRenderer(WindowHandle);
   SDL_SetRenderDrawColor(Renderer, RGB.R, RGB.G, RGB.B, 255);
   SDL_RenderDrawPoint(Renderer, X, Y);
+}
+
+long long multipliedCos(size_t Mult, long long Arg) {
+  return ((double) Mult) * cos(Arg);
 }

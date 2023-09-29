@@ -31,6 +31,6 @@ int main(int Argc, char **Argv) {
                       /*WindowHandle*/ NULL, 
                       /*RenderHandle*/ NULL,
                       /*Height*/ 1000, 
-                      /*Width*/  1000};
+                      /*Width*/  1500};
   processSim(/*NumOfFrames*/ 100, /*Delay*/ 1, Config);
 }
