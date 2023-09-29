@@ -13,3 +13,4 @@ add_executable(${PROJECT_NAME} main.c
                                lib/Engine.c
                                lib/Graphics.c)
 target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} m)

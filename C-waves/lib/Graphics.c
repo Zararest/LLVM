@@ -1,10 +1,11 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_timer.h>
+
 #include <assert.h>
 
-#include "../include/Driver.h"
-#include "../include/GraphCInterface.h"
+#include "Driver.h"
+#include "GraphCInterface.h"
 
 void *initWindow(size_t Height, size_t Width) {
   SDL_Window* Window = SDL_CreateWindow("Wave", 
