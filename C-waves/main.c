@@ -2,10 +2,10 @@
 
 #include <SDL.h>
 
-void processSim(size_t NumOfFrames, 
-                size_t Delay, SimConfig Config) {
+void processSim(size_t NumOfFrames, size_t Delay, SimConfig Config) {
   void *Handle = initWindow(Config.Height, Config.Width);
-  Config.RenderHandle = SDL_CreateRenderer(Handle, -1, SDL_RENDERER_ACCELERATED);
+  Config.RenderHandle =
+      SDL_CreateRenderer(Handle, -1, SDL_RENDERER_ACCELERATED);
   SDL_SetRenderDrawColor(Config.RenderHandle, 0, 0, 0, 0);
   SDL_RenderClear(Config.RenderHandle);
 
@@ -27,10 +27,10 @@ void processSim(size_t NumOfFrames,
 }
 
 int main(int Argc, char **Argv) {
-  SimConfig Config = {/*dT*/ 1, 
-                      /*WindowHandle*/ NULL, 
+  SimConfig Config = {/*dT*/ 1,
+                      /*WindowHandle*/ NULL,
                       /*RenderHandle*/ NULL,
-                      /*Height*/ 1000, 
-                      /*Width*/  1500};
+                      /*Height*/ 1000,
+                      /*Width*/ 1500};
   processSim(/*NumOfFrames*/ 30, /*Delay*/ 0, Config);
 }

@@ -3,8 +3,8 @@
 
 #include <assert.h>
 #include <math.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Симуляция сферической волны
 // На экране будет изображен профиль сферчиеской волны:
@@ -25,11 +25,11 @@ typedef struct WaveSource {
   size_t X;
   size_t Y;
 
-// initial parameters of the source
+  // initial parameters of the source
   size_t T0;
   size_t Phi0;
 
-// the end of source
+  // the end of source
   size_t AlreadyDoesntExist;
   size_t TEnd;
 } WaveSource;
@@ -40,24 +40,28 @@ typedef struct WaveSourcesList {
   WaveSource *Arr;
 } WaveSourcesList;
 
-long long getAmplitudeFromSrc(size_t X, size_t Y, 
-                           size_t GlobalT, const WaveSource *Src) {
+long long getAmplitudeFromSrc(size_t X, size_t Y, size_t GlobalT,
+                              const WaveSource *Src) {
   assert(Src);
-  size_t RSquare = R_UNIT * R_UNIT * ((X - Src->X) * (X - Src->X) + (Y - Src->Y) * (Y - Src->Y));
+  size_t RSquare = R_UNIT * R_UNIT *
+                   ((X - Src->X) * (X - Src->X) + (Y - Src->Y) * (Y - Src->Y));
   size_t TimeToTravelSquare = RSquare / (C * C);
   assert(GlobalT >= Src->T0);
   if (RSquare == 0)
     return Src->A;
   if (TimeToTravelSquare > (GlobalT - Src->T0) * (GlobalT - Src->T0))
     return 0;
-  if (Src->AlreadyDoesntExist && (GlobalT - Src->TEnd) * (GlobalT - Src->TEnd) > TimeToTravelSquare)
+  if (Src->AlreadyDoesntExist &&
+      (GlobalT - Src->TEnd) * (GlobalT - Src->TEnd) > TimeToTravelSquare)
     return 0;
 
-  long long Arg = Src->W * sqrtli(TimeToTravelSquare) - Src->W * (GlobalT - sqrtli(TimeToTravelSquare));
+  long long Arg = Src->W * sqrtli(TimeToTravelSquare) -
+                  Src->W * (GlobalT - sqrtli(TimeToTravelSquare));
   return multipliedCos(Src->A * A_BOOST / sqrtli(RSquare), Arg);
 }
 
-Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT, const WaveSourcesList *SrcArr) {
+Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT,
+                     const WaveSourcesList *SrcArr) {
   assert(SrcArr);
   // результирующая амплитуда
   long long ARes = 0;
@@ -65,21 +69,22 @@ Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT, const WaveSourcesList *
     ARes += getAmplitudeFromSrc(X, Y, GlobalT, &SrcArr->Arr[i]);
   size_t J = ARes * ARes;
   size_t JMax = (SrcArr->MaxA * SrcArr->Count) * (SrcArr->MaxA * SrcArr->Count);
-  long long NormilizedJ = J * 256 / JMax; 
+  long long NormilizedJ = J * 256 / JMax;
 
   Color Res = {NormilizedJ, NormilizedJ, NormilizedJ};
   return Res;
 }
 
-Color getPixelColorA(size_t X, size_t Y, size_t GlobalT, const WaveSourcesList *SrcArr) {
+Color getPixelColorA(size_t X, size_t Y, size_t GlobalT,
+                     const WaveSourcesList *SrcArr) {
   assert(SrcArr);
   // результирующая амплитуда
   long long ARes = 0;
   for (size_t i = 0; i < SrcArr->Count; ++i)
     ARes += getAmplitudeFromSrc(X, Y, GlobalT, &SrcArr->Arr[i]);
   size_t AMax = SrcArr->MaxA * SrcArr->Count;
-  long long NormilizedA = ARes * 127 / AMax; 
-  
+  long long NormilizedA = ARes * 127 / AMax;
+
   Color Res = {NormilizedA + 127, NormilizedA + 127, NormilizedA + 127};
   return Res;
 }
@@ -91,7 +96,7 @@ void addSources(size_t Height, size_t Width, WaveSourcesList *Src) {
   Src->Arr[0].A = 10000;
   Src->Arr[0].Y = Height / 2;
   Src->Arr[0].X = Width / 2 - 50;
-  
+
   Src->Arr[1].W = 6;
   Src->Arr[1].A = 10000;
   Src->Arr[1].Y = Height / 2;
@@ -104,9 +109,7 @@ void addSources(size_t Height, size_t Width, WaveSourcesList *Src) {
   assert(Src->MaxA);
 }
 
-void deleteSources(WaveSourcesList *Src) {
-  free(Src->Arr);
-}
+void deleteSources(WaveSourcesList *Src) { free(Src->Arr); }
 
 // main
 void configureFrame(SimConfig Config) {
@@ -114,11 +117,11 @@ void configureFrame(SimConfig Config) {
   addSources(Config.Height, Config.Width, &Src);
   static size_t GlobalT = 10;
   for (size_t X = 0; X < Config.Width; ++X)
-    for (size_t Y = 0; Y < Config.Height; ++Y) 
-    #ifdef DRAW_A
+    for (size_t Y = 0; Y < Config.Height; ++Y)
+#ifdef DRAW_A
       setPixel(X, Y, getPixelColorA(X, Y, GlobalT, &Src), Config.WindowHandle);
-    #else
+#else
       setPixel(X, Y, getPixelColorJ(X, Y, GlobalT, &Src), Config.WindowHandle);
-    #endif
+#endif
   GlobalT += Config.dT;
 }

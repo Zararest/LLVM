@@ -4,6 +4,6 @@ typedef struct SimConfig {
   void *RenderHandle;
   size_t Height;
   size_t Width;
-} SimConfig;  
+} SimConfig;
 
 void configureFrame(SimConfig Config);

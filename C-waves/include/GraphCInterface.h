@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct Color {
   uint8_t R;
@@ -7,9 +7,7 @@ typedef struct Color {
   uint8_t B;
 } Color;
 
-void setPixel(size_t X, size_t Y, 
-              Color RGB, 
-              void *WindowHandle);
+void setPixel(size_t X, size_t Y, Color RGB, void *WindowHandle);
 
 // Mult * cos(Arg)
 long long multipliedCos(size_t Mult, long long Arg);

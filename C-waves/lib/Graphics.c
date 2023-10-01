@@ -29,18 +29,14 @@ void destroyWindow(void *WindowHandle) {
   SDL_Quit();
 }
 
-void setPixel(size_t X, size_t Y, 
-              Color RGB, 
-              void *WindowHandle) {
+void setPixel(size_t X, size_t Y, Color RGB, void *WindowHandle) {
   SDL_Renderer *Renderer = SDL_GetRenderer(WindowHandle);
   SDL_SetRenderDrawColor(Renderer, RGB.R, RGB.G, RGB.B, 255);
   SDL_RenderDrawPoint(Renderer, X, Y);
 }
 
 long long multipliedCos(size_t Mult, long long Arg) {
-  return ((double) Mult) * cos(Arg);
+  return ((double)Mult) * cos(Arg);
 }
 
-size_t sqrtli(size_t Arg) {
-  return sqrt(Arg);
-}
+size_t sqrtli(size_t Arg) { return sqrt(Arg); }
