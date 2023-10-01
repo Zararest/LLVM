@@ -28,6 +28,10 @@ typedef struct WaveSource {
 // initial parameters of the source
   size_t T0;
   size_t Phi0;
+
+// the end of source
+  size_t AlreadyDoesntExist;
+  size_t TEnd;
 } WaveSource;
 
 typedef struct WaveSourcesList {
@@ -46,9 +50,11 @@ long long getAmplitudeFromSrc(size_t X, size_t Y,
     return Src->A;
   if (TimeToTravelSquare > (GlobalT - Src->T0) * (GlobalT - Src->T0))
     return 0;
+  if (Src->AlreadyDoesntExist && (GlobalT - Src->TEnd) * (GlobalT - Src->TEnd) > TimeToTravelSquare)
+    return 0;
 
-  long long Arg = Src->W * sqrt(TimeToTravelSquare) - Src->W * (GlobalT - sqrt(TimeToTravelSquare));
-  return multipliedCos(Src->A * A_BOOST / sqrt(RSquare), Arg);
+  long long Arg = Src->W * sqrtli(TimeToTravelSquare) - Src->W * (GlobalT - sqrtli(TimeToTravelSquare));
+  return multipliedCos(Src->A * A_BOOST / sqrtli(RSquare), Arg);
 }
 
 Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT, const WaveSourcesList *SrcArr) {
@@ -60,7 +66,7 @@ Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT, const WaveSourcesList *
   size_t J = ARes * ARes;
   size_t JMax = (SrcArr->MaxA * SrcArr->Count) * (SrcArr->MaxA * SrcArr->Count);
   long long NormilizedJ = J * 256 / JMax; 
-  
+
   Color Res = {NormilizedJ, NormilizedJ, NormilizedJ};
   return Res;
 }
@@ -84,12 +90,12 @@ void addSources(size_t Height, size_t Width, WaveSourcesList *Src) {
   Src->Arr[0].W = 5;
   Src->Arr[0].A = 10000;
   Src->Arr[0].Y = Height / 2;
-  Src->Arr[0].X = 0;
+  Src->Arr[0].X = Width / 2 - 50;
   
-  Src->Arr[1].W = 5;
+  Src->Arr[1].W = 6;
   Src->Arr[1].A = 10000;
   Src->Arr[1].Y = Height / 2;
-  Src->Arr[1].X = Width;
+  Src->Arr[1].X = Width / 2 + 50;
 
   Src->MaxA = 0;
   for (size_t i = 0; i < Src->Count; ++i)
@@ -108,7 +114,7 @@ void configureFrame(SimConfig Config) {
   addSources(Config.Height, Config.Width, &Src);
   static size_t GlobalT = 10;
   for (size_t X = 0; X < Config.Width; ++X)
-    for (size_t Y = 0; Y < Config.Height; ++Y)
+    for (size_t Y = 0; Y < Config.Height; ++Y) 
     #ifdef DRAW_A
       setPixel(X, Y, getPixelColorA(X, Y, GlobalT, &Src), Config.WindowHandle);
     #else

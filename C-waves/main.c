@@ -27,10 +27,10 @@ void processSim(size_t NumOfFrames,
 }
 
 int main(int Argc, char **Argv) {
-  SimConfig Config = {/*dT*/ 10, 
+  SimConfig Config = {/*dT*/ 1, 
                       /*WindowHandle*/ NULL, 
                       /*RenderHandle*/ NULL,
                       /*Height*/ 1000, 
                       /*Width*/  1500};
-  processSim(/*NumOfFrames*/ 100, /*Delay*/ 1, Config);
+  processSim(/*NumOfFrames*/ 30, /*Delay*/ 0, Config);
 }
