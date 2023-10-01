@@ -32,5 +32,5 @@ int main(int Argc, char **Argv) {
                       /*RenderHandle*/ NULL,
                       /*Height*/ 1000,
                       /*Width*/ 1500};
-  processSim(/*NumOfFrames*/ 30, /*Delay*/ 0, Config);
+  processSim(/*NumOfFrames*/ 15, /*Delay*/ 0, Config);
 }

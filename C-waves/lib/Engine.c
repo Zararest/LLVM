@@ -8,7 +8,7 @@
 
 // Симуляция сферической волны
 // На экране будет изображен профиль сферчиеской волны:
-//  E = E_0 / r cos(k * r - w * (t - r / c))
+//  E = E_0 / r cos(k * r - w * (t - t_0) + phi_0)
 //  r = sqrt((x - x_0)^2 - (y - y_0)^2)
 //  k = w / c
 
@@ -55,8 +55,8 @@ long long getAmplitudeFromSrc(size_t X, size_t Y, size_t GlobalT,
       (GlobalT - Src->TEnd) * (GlobalT - Src->TEnd) > TimeToTravelSquare)
     return 0;
 
-  long long Arg = Src->W * sqrtli(TimeToTravelSquare) -
-                  Src->W * (GlobalT - sqrtli(TimeToTravelSquare));
+  long long Arg = multipliedSqrt(Src->W, TimeToTravelSquare) -
+                  Src->W * (GlobalT);
   return multipliedCos(Src->A * A_BOOST / sqrtli(RSquare), Arg);
 }
 

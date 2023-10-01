@@ -39,4 +39,10 @@ long long multipliedCos(size_t Mult, long long Arg) {
   return ((double)Mult) * cos(Arg);
 }
 
-long long sqrtli(size_t Arg) { return sqrt(Arg); }
+long long sqrtli(size_t Arg) {
+  return sqrt(Arg);
+}
+
+long long multipliedSqrt(size_t Mult, size_t Arg) { 
+  return Mult * sqrt(Arg); 
+}
