@@ -11,4 +11,4 @@ void setPixel(size_t X, size_t Y, Color RGB, void *WindowHandle);
 
 // Mult * cos(Arg)
 long long multipliedCos(size_t Mult, long long Arg);
-size_t sqrtli(size_t Arg);
+long long sqrtli(size_t Arg);

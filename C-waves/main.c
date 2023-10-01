@@ -10,6 +10,7 @@ void processSim(size_t NumOfFrames, size_t Delay, SimConfig Config) {
   SDL_RenderClear(Config.RenderHandle);
 
   Config.WindowHandle = Handle;
+  SDL_Event Event;
   int Quit = 0;
   for (size_t i = 0; i < NumOfFrames; ++i) {
     updateWindow(Config);
@@ -18,7 +19,6 @@ void processSim(size_t NumOfFrames, size_t Delay, SimConfig Config) {
   }
 
   while (1 && !Quit) {
-    SDL_Event Event;
     if (SDL_PollEvent(&Event) && Event.type == SDL_QUIT)
       break;
   }
