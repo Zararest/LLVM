@@ -13,32 +13,10 @@
 //  k = w / c
 
 #define C 100
-#define R_UNIT 3
+#define R_UNIT 10
 
 // чтобы волны было нормально видно их надо умножить на константу
 #define A_BOOST 1000
-
-typedef struct WaveSource {
-  size_t W;
-  size_t A;
-
-  size_t X;
-  size_t Y;
-
-  // initial parameters of the source
-  size_t T0;
-  size_t Phi0;
-
-  // the end of source
-  size_t AlreadyDoesntExist;
-  size_t TEnd;
-} WaveSource;
-
-typedef struct WaveSourcesList {
-  size_t Count;
-  size_t MaxA;
-  WaveSource *Arr;
-} WaveSourcesList;
 
 long long getAmplitudeFromSrc(size_t X, size_t Y, size_t GlobalT,
                               const WaveSource *Src) {
@@ -55,20 +33,20 @@ long long getAmplitudeFromSrc(size_t X, size_t Y, size_t GlobalT,
       (GlobalT - Src->TEnd) * (GlobalT - Src->TEnd) > TimeToTravelSquare)
     return 0;
 
-  long long Arg = multipliedSqrt(Src->W, TimeToTravelSquare) -
-                  Src->W * (GlobalT);
+  long long Arg = 
+    multipliedSqrt(Src->W, TimeToTravelSquare) - Src->W * (GlobalT);
   return multipliedCos(Src->A * A_BOOST / sqrtli(RSquare), Arg);
 }
 
 Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT,
-                     const WaveSourcesList *SrcArr) {
-  assert(SrcArr);
+                     const WaveSourcesList SrcArr) {;
+  assert(SrcArr.Count);
   // результирующая амплитуда
   long long ARes = 0;
-  for (size_t i = 0; i < SrcArr->Count; ++i)
-    ARes += getAmplitudeFromSrc(X, Y, GlobalT, &SrcArr->Arr[i]);
+  for (size_t i = 0; i < SrcArr.Count; ++i)
+    ARes += getAmplitudeFromSrc(X, Y, GlobalT, &SrcArr.Arr[i]);
   size_t J = ARes * ARes;
-  size_t JMax = (SrcArr->MaxA * SrcArr->Count) * (SrcArr->MaxA * SrcArr->Count);
+  size_t JMax = (SrcArr.MaxA * SrcArr.Count) * (SrcArr.MaxA * SrcArr.Count);
   long long NormilizedJ = J * 256 / JMax;
 
   Color Res = {NormilizedJ, NormilizedJ, NormilizedJ};
@@ -76,13 +54,13 @@ Color getPixelColorJ(size_t X, size_t Y, size_t GlobalT,
 }
 
 Color getPixelColorA(size_t X, size_t Y, size_t GlobalT,
-                     const WaveSourcesList *SrcArr) {
-  assert(SrcArr);
+                     const WaveSourcesList SrcArr) {
+  assert(SrcArr.Count);
   // результирующая амплитуда
   long long ARes = 0;
-  for (size_t i = 0; i < SrcArr->Count; ++i)
-    ARes += getAmplitudeFromSrc(X, Y, GlobalT, &SrcArr->Arr[i]);
-  size_t AMax = SrcArr->MaxA * SrcArr->Count;
+  for (size_t i = 0; i < SrcArr.Count; ++i)
+    ARes += getAmplitudeFromSrc(X, Y, GlobalT, &SrcArr.Arr[i]);
+  size_t AMax = SrcArr.MaxA * SrcArr.Count;
   long long NormilizedA = ARes * 127 / AMax;
 
   Color Res = {NormilizedA + 127, NormilizedA + 127, NormilizedA + 127};
@@ -109,19 +87,27 @@ void addSources(size_t Height, size_t Width, WaveSourcesList *Src) {
   assert(Src->MaxA);
 }
 
-void deleteSources(WaveSourcesList *Src) { free(Src->Arr); }
+void deleteSources(WaveSourcesList Src) { free(Src.Arr); }
+
+void simPrologue(SimConfig *Config) {
+  WaveSourcesList Src = {};
+  addSources(Config->Height, Config->Width, &Src);
+  Config->Src = Src;
+}
 
 // main
-void configureFrame(SimConfig Config) {
-  WaveSourcesList Src = {};
-  addSources(Config.Height, Config.Width, &Src);
+void configureFrame(SimConfig *Config) {
   static size_t GlobalT = 10;
-  for (size_t X = 0; X < Config.Width; ++X)
-    for (size_t Y = 0; Y < Config.Height; ++Y)
+  for (size_t X = 0; X < Config->Width; ++X)
+    for (size_t Y = 0; Y < Config->Height; ++Y)
 #ifdef DRAW_A
-      setPixel(X, Y, getPixelColorA(X, Y, GlobalT, &Src), Config.WindowHandle);
+      setPixel(X, Y, getPixelColorA(X, Y, GlobalT, Config->Src), Config->WindowHandle);
 #else
-      setPixel(X, Y, getPixelColorJ(X, Y, GlobalT, &Src), Config.WindowHandle);
+      setPixel(X, Y, getPixelColorJ(X, Y, GlobalT, Config->Src), Config->WindowHandle);
 #endif
-  GlobalT += Config.dT;
+  GlobalT += Config->dT;
+}
+
+void simEpilogue(SimConfig *Config) {
+  deleteSources(Config->Src);
 }

@@ -18,10 +18,10 @@ void *initWindow(size_t Height, size_t Width) {
   return Window;
 }
 
-void updateWindow(SimConfig Config) {
+void updateWindow(SimConfig *Config) {
   configureFrame(Config);
-  SDL_RenderPresent(Config.RenderHandle);
-  SDL_UpdateWindowSurface(Config.WindowHandle);
+  SDL_RenderPresent(Config->RenderHandle);
+  SDL_UpdateWindowSurface(Config->WindowHandle);
 }
 
 void destroyWindow(void *WindowHandle) {
