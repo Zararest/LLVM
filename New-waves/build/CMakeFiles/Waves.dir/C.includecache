@@ -1,0 +1,22 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../lib/Graphics.h
+stdint.h
+-
+
+/home/uwu/Proga/LLVM-course/New-waves/Engine.c
+Graphics.h
+/home/uwu/Proga/LLVM-course/New-waves/Graphics.h
+stdlib.h
+-
+stdio.h
+-
+string.h
+-
+

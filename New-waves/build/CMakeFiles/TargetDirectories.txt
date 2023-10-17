@@ -1,0 +1,3 @@
+/home/uwu/Proga/LLVM-course/New-waves/build/CMakeFiles/rebuild_cache.dir
+/home/uwu/Proga/LLVM-course/New-waves/build/CMakeFiles/edit_cache.dir
+/home/uwu/Proga/LLVM-course/New-waves/build/CMakeFiles/Waves.dir
