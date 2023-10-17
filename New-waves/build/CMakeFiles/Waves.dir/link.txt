@@ -1,1 +1,0 @@
-/usr/bin/cc    CMakeFiles/Waves.dir/Engine.c.o CMakeFiles/Waves.dir/lib/Graphics.c.o  -o Waves  -lSDL2 -lm 
