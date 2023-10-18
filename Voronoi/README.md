@@ -22,9 +22,9 @@ make
 ./Voronoi
 ```
 
-Создание файла с IR:
+## Получение llvm IR
 ```
 make install
 ```
 
-## Получение llvm IR
+В файле `Engine-IR.ll` лежит IR для файла Engine.c, скомпилированного на `-O1`.
