@@ -9,17 +9,12 @@ set(CMAKE_CPP_COMPILER clang++-12)
 
 include_directories(lib)
 
-# Function for configuring main project as target
-function(ConfigExecTarget TARGET_NAME)
-  message("Building files for target: ${TARGET_NAME}")
-  find_package(SDL2 REQUIRED)
-  add_executable(${TARGET_NAME} Engine.c lib/Graphics.c)
-  target_link_libraries(${TARGET_NAME} ${SDL2_LIBRARIES})
-  target_link_libraries(${TARGET_NAME} m)
-endfunction()
-
 # Main target
-ConfigExecTarget(${PROJECT_NAME})
+message("Building files for target: ${PROJECT_NAME}")
+find_package(SDL2 REQUIRED)
+add_executable(${PROJECT_NAME} Engine.c lib/Graphics.c)
+target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} m)
 
 # IR dump
 set(IR_FILE_NAME "Engine-IR.ll")
@@ -34,13 +29,16 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${IR_FILE_NAME}"
 # Profiler
 find_package(LLVM REQUIRED CONFIG)
 add_library(Profiler SHARED Profiler-pass.cpp)
-target_include_directories(Profiler PUBLIC ${LLVM_INCLUDE_DIRS})
+target_include_directories(Profiler PUBLIC /usr/lib/llvm-12/include)
 target_compile_definitions(Profiler PUBLIC ${LLVM_DEFINITIONS})
 set_target_properties(Profiler PROPERTIES POSITION_INDEPENDENT_CODE True)
-target_link_libraries(Profiler ${llvm_libs})
 
 # IR with profiler
-ConfigExecTarget(${PROJECT_NAME}-profiled)
+find_package(SDL2 REQUIRED)
+add_executable(${PROJECT_NAME}-profiled Engine.c lib/Graphics.c Logger.cpp)
+target_link_libraries(${PROJECT_NAME}-profiled ${SDL2_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}-profiled m)
+
 add_dependencies(${PROJECT_NAME}-profiled Profiler)
 message("Current coompiler ${CMAKE_C_COMPILER}")
 # I don't know how to get target path right
