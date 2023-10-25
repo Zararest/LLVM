@@ -35,10 +35,10 @@ set_target_properties(Profiler PROPERTIES POSITION_INDEPENDENT_CODE True)
 
 # IR with profiler
 find_package(SDL2 REQUIRED)
-add_executable(${PROJECT_NAME}-profiled Engine.c lib/Graphics.c Logger.cpp)
+add_executable(${PROJECT_NAME}-profiled Engine.c lib/Graphics.c Logger.c)
+target_compile_options(${PROJECT_NAME}-profiled PUBLIC -O2)
 target_link_libraries(${PROJECT_NAME}-profiled ${SDL2_LIBRARIES})
 target_link_libraries(${PROJECT_NAME}-profiled m)
-
 add_dependencies(${PROJECT_NAME}-profiled Profiler)
 message("Current coompiler ${CMAKE_C_COMPILER}")
 # I don't know how to get target path right

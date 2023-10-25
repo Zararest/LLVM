@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <vector>
+#include <cassert>
 
 using namespace llvm;
 
@@ -26,25 +27,79 @@ class Profiler : public FunctionPass {
   }
 
   bool isLoggerFunction(StringRef Name) {
-    return Name == "logFuncStart";
+    return Name == "logFuncStart" ||  Name == "logFuncEnd" ||
+           Name == "logBinOp" || Name == "logCallOp" ||
+           Name == "";
   }
 
-  bool isEngineFunction(StringRef Name) {
-    return Name == "xorshift"  || Name == "changePosition" ||
-           Name == "updateDot" || Name == "changeState" ||
-           Name == "distance"  || Name == "getNearestDot" ||
+  bool isEngineFunc(StringRef Name) {
+    return Name == "changePosition" || Name == "updateDot" ||
+           Name == "changeState" || Name == "getNearestDot" ||
            Name == "drawFrame" || Name == "initDots" ||
            Name == "app";
   }
 
-  void generateBBPrologue(BasicBlock &BB) {
+  // Логирование базовых блоков выдает ошибку на этапе перевода в MIR
+
+  void generateBinOp(Instruction &I) {
+    assert(I.getParent());
+    auto &BB = *I.getParent();
+    auto &Ctx = BB.getContext();
+    auto &IB = getOrCreateIRBuilder(Ctx);
+    auto ParamTypes = ArrayRef<Type *>{/*Op*/  Type::getInt32Ty(Ctx),
+                                       /*Lhs*/ Type::getInt32Ty(Ctx),
+                                       /*Rhs*/ Type::getInt32Ty(Ctx),
+                                       /*Op name*/ IB.getInt8Ty()->getPointerTo(),
+                                       /*Instr Id*/ Type::getInt64Ty(Ctx)};
+    auto RetType = Type::getVoidTy(Ctx);
+    
+    auto FuncType = FunctionType::get(RetType, ParamTypes, false);
+    auto Func = 
+      BB.getParent()->getParent()->getOrInsertFunction("logBinOp", FuncType);
+
+    IB.SetInsertPoint(&I);
+    auto *Op = dyn_cast<BinaryOperator>(&I);
+    assert(Op);
+    auto *Lhs = Op->getOperand(0);
+    auto *Rhs = Op->getOperand(1); 
+    auto *OpName = IB.CreateGlobalStringPtr(Op->getOpcodeName());
+    auto *InstrId = 
+      ConstantInt::get(IB.getInt64Ty(), reinterpret_cast<uint64_t>(&I));
+    auto Args = std::vector<Value *>{Op, Lhs, Rhs, OpName, InstrId};
+    IB.CreateCall(Func, Args);
   }
 
-  void generateBBEpilogue(BasicBlock &BB) {
-
+  void generateCall(Instruction &I) {
+    return;
+    assert(I.getParent());
+    assert(I.getParent()->getParent());
+    auto &F = *I.getParent()->getParent();
+    auto &Ctx = F.getContext();
+    auto &IB = getOrCreateIRBuilder(Ctx);
+    auto ParamTypes = ArrayRef<Type *>{IB.getInt8Ty()->getPointerTo()};
+    auto RetType = Type::getVoidTy(Ctx);
+    
+    auto *Call = dyn_cast<CallInst>(&I);
+    assert(Call);
+    auto CalleName = Call->getCalledFunction()->getName();
+    auto FuncType = FunctionType::get(RetType, ParamTypes, false);
+    auto LogFuncName = isEngineFunc(CalleName) ? StringRef{"logFuncStart"} 
+                                                : StringRef{"logCallOp"};
+    auto Func = 
+      F.getParent()->getOrInsertFunction(LogFuncName, FuncType);
+    
+    /* !!! Надо сначала делать SetInsertPoint а потом CreateGlobalStringPtr !!!*/
+    IB.SetInsertPoint(&I);
+    auto *FuncName = IB.CreateGlobalStringPtr(F.getName());
+    auto Args = std::vector<Value *>{FuncName};
+    IB.CreateCall(Func, Args);
   }
 
-  void generateFuncPrologue(Function &F) {
+  void generateRet(Instruction &I) {
+    return;
+    assert(I.getParent());
+    assert(I.getParent()->getParent());
+    auto &F = *I.getParent()->getParent();
     auto &Ctx = F.getContext();
     auto &IB = getOrCreateIRBuilder(Ctx);
     auto ParamTypes = ArrayRef<Type *>{IB.getInt8Ty()->getPointerTo()};
@@ -52,37 +107,42 @@ class Profiler : public FunctionPass {
     
     auto FuncType = FunctionType::get(RetType, ParamTypes, false);
     auto Func = 
-      F.getParent()->getOrInsertFunction("logFuncStart", FuncType);
-    auto FuncName = IB.CreateGlobalStringPtr(F.getName());
+      F.getParent()->getOrInsertFunction("logFuncEnd", FuncType);
+    
+    IB.SetInsertPoint(&I);
+    auto *FuncName = IB.CreateGlobalStringPtr(F.getName());
     auto Args = std::vector<Value *>{FuncName};
-    
-    IB.SetInsertPoint(&F.getEntryBlock().front());
     IB.CreateCall(Func, Args);
-    outs() << "Inserted func prologue in " << F.getName() << "\n";
-  }
-
-  void generateFuncEpilogue(Function &F) {
-    
-  }
-
-  void generateBinOp(Instruction &I) {
-
-  }
-
-  void generateCall(Instruction &I) {
-    
-  }
-
-  void generateRet(Instruction &I) {
-    
   }
 
   void generateCmp(Instruction &I) {
+    return;
+    assert(I.getParent());
+    auto &BB = *I.getParent();
+    auto &Ctx = BB.getContext();
+    auto &IB = getOrCreateIRBuilder(Ctx);
+    auto ParamTypes = ArrayRef<Type *>{/*Op*/  Type::getInt32Ty(Ctx),
+                                       /*Predicate*/ Type::getInt32Ty(Ctx),
+                                       /*Op name*/ IB.getInt8Ty()->getPointerTo(),
+                                       /*Instr Id*/ Type::getInt64Ty(Ctx)};
+    auto RetType = Type::getVoidTy(Ctx);
     
+    auto FuncType = FunctionType::get(RetType, ParamTypes, false);
+    auto Func = 
+      BB.getParent()->getParent()->getOrInsertFunction("logCmpOp", FuncType);
+
+    IB.SetInsertPoint(&I);
+    auto *Op = dyn_cast<CmpInst>(&I);
+    assert(Op);
+    auto Pred = ConstantInt::get(IB.getInt32Ty(), Op->getPredicate()); 
+    auto *OpName = IB.CreateGlobalStringPtr(Op->getOpcodeName());
+    auto *InstrId = 
+      ConstantInt::get(IB.getInt64Ty(), reinterpret_cast<uint64_t>(&I));
+    auto Args = std::vector<Value *>{Op, Pred, OpName, InstrId};
+    IB.CreateCall(Func, Args);
   }
 
   void runOnBB(BasicBlock &BB) {
-    generateBBPrologue(BB);
     for (auto &I : BB) {
       if (auto *BinOp = dyn_cast<BinaryOperator>(&I))
         generateBinOp(I);
@@ -93,7 +153,6 @@ class Profiler : public FunctionPass {
       if (auto *Cmp = dyn_cast<CmpInst>(&I))
         generateCmp(I);
     }
-    generateBBEpilogue(BB);
   }
 
 public:
@@ -103,13 +162,11 @@ public:
 
   virtual bool runOnFunction(Function &F) override {
     if (isLoggerFunction(F.getName()) ||
-        !isEngineFunction(F.getName()))
+        !isEngineFunc(F.getName()))
       return false;
 
-    generateFuncPrologue(F);
     for (auto &BB : F)
       runOnBB(BB);
-    generateFuncEpilogue(F);
     return true;
   }
 };
