@@ -4,17 +4,22 @@ project(Voronoi)
 find_package(SDL2 REQUIRED)
 include_directories(SDL2Test ${SDL2_INCLUDE_DIRS})
 
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CPP_COMPILER clang++)
+set(CMAKE_C_COMPILER clang-12)
+set(CMAKE_CPP_COMPILER clang++-12)
 
 include_directories(lib)
 
+# Function for configuring main project as target
+function(ConfigExecTarget TARGET_NAME)
+  message("Building files for target: ${TARGET_NAME}")
+  find_package(SDL2 REQUIRED)
+  add_executable(${TARGET_NAME} Engine.c lib/Graphics.c)
+  target_link_libraries(${TARGET_NAME} ${SDL2_LIBRARIES})
+  target_link_libraries(${TARGET_NAME} m)
+endfunction()
+
 # Main target
-find_package(SDL2 REQUIRED)
-add_executable(${PROJECT_NAME} Engine.c
-                               lib/Graphics.c)
-target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} m)
+ConfigExecTarget(${PROJECT_NAME})
 
 # IR dump
 set(IR_FILE_NAME "Engine-IR.ll")
@@ -28,9 +33,16 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${IR_FILE_NAME}"
 
 # Profiler
 find_package(LLVM REQUIRED CONFIG)
-add_library(Profiler Profiler-pass.cpp)
+add_library(Profiler SHARED Profiler-pass.cpp)
 target_include_directories(Profiler PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_definitions(Profiler PUBLIC ${LLVM_DEFINITIONS})
 set_target_properties(Profiler PROPERTIES POSITION_INDEPENDENT_CODE True)
-llvm_map_components_to_libnames(llvm_libs support)
 target_link_libraries(Profiler ${llvm_libs})
+
+# IR with profiler
+ConfigExecTarget(${PROJECT_NAME}-profiled)
+add_dependencies(${PROJECT_NAME}-profiled Profiler)
+message("Current coompiler ${CMAKE_C_COMPILER}")
+# I don't know how to get target path right
+# As long as I use clang-12, no additional options are needed
+target_compile_options(${PROJECT_NAME}-profiled PUBLIC "-fplugin=${CMAKE_CURRENT_BINARY_DIR}/libProfiler.so")

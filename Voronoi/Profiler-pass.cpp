@@ -3,6 +3,9 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+
+#include <cassert>
+
 using namespace llvm;
 
 namespace {
@@ -11,6 +14,7 @@ namespace {
     MyPass() : FunctionPass(ID) {}
 
     virtual bool runOnFunction(Function &F) {
+      //assert(false);
       outs() << "In a function called " << F.getName() << "!\n";
 
       outs() << "Function body:\n";
