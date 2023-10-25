@@ -29,7 +29,7 @@ class Profiler : public FunctionPass {
   bool isLoggerFunction(StringRef Name) {
     return Name == "logFuncStart" ||  Name == "logFuncEnd" ||
            Name == "logBinOp" || Name == "logCallOp" ||
-           Name == "";
+           Name == "logCmpOp";
   }
 
   bool isEngineFunc(StringRef Name) {
@@ -52,12 +52,13 @@ class Profiler : public FunctionPass {
                                        /*Op name*/ IB.getInt8Ty()->getPointerTo(),
                                        /*Instr Id*/ Type::getInt64Ty(Ctx)};
     auto RetType = Type::getVoidTy(Ctx);
-    
     auto FuncType = FunctionType::get(RetType, ParamTypes, false);
     auto Func = 
       BB.getParent()->getParent()->getOrInsertFunction("logBinOp", FuncType);
 
     IB.SetInsertPoint(&I);
+    // Вставлем после инструкции?
+    IB.SetInsertPoint(&BB, ++IB.GetInsertPoint());
     auto *Op = dyn_cast<BinaryOperator>(&I);
     assert(Op);
     auto *Lhs = Op->getOperand(0);
@@ -70,7 +71,6 @@ class Profiler : public FunctionPass {
   }
 
   void generateCall(Instruction &I) {
-    return;
     assert(I.getParent());
     assert(I.getParent()->getParent());
     auto &F = *I.getParent()->getParent();
@@ -81,22 +81,26 @@ class Profiler : public FunctionPass {
     
     auto *Call = dyn_cast<CallInst>(&I);
     assert(Call);
+    assert(Call->getCalledFunction());
     auto CalleName = Call->getCalledFunction()->getName();
+    
+    if (isLoggerFunction(CalleName))
+      return;
+
     auto FuncType = FunctionType::get(RetType, ParamTypes, false);
     auto LogFuncName = isEngineFunc(CalleName) ? StringRef{"logFuncStart"} 
-                                                : StringRef{"logCallOp"};
+                                               : StringRef{"logCallOp"};
     auto Func = 
       F.getParent()->getOrInsertFunction(LogFuncName, FuncType);
     
     /* !!! Надо сначала делать SetInsertPoint а потом CreateGlobalStringPtr !!!*/
     IB.SetInsertPoint(&I);
-    auto *FuncName = IB.CreateGlobalStringPtr(F.getName());
+    auto *FuncName = IB.CreateGlobalStringPtr(CalleName);
     auto Args = std::vector<Value *>{FuncName};
     IB.CreateCall(Func, Args);
   }
 
   void generateRet(Instruction &I) {
-    return;
     assert(I.getParent());
     assert(I.getParent()->getParent());
     auto &F = *I.getParent()->getParent();
@@ -110,7 +114,7 @@ class Profiler : public FunctionPass {
       F.getParent()->getOrInsertFunction("logFuncEnd", FuncType);
     
     IB.SetInsertPoint(&I);
-    auto *FuncName = IB.CreateGlobalStringPtr(F.getName());
+    auto *FuncName = IB.CreateGlobalStringPtr("ret");
     auto Args = std::vector<Value *>{FuncName};
     IB.CreateCall(Func, Args);
   }

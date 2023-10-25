@@ -32,5 +32,5 @@ void logCmpOp(int Predicate, const char *OpName, long long InstrId) {
 void logCallOp(const char *FuncName) {
   for (unsigned i = 0; i < RecursionDepth; ++i)
     printf("  ");
-  printf("Calling func %s\n", FuncName);
+  printf("Calling external func %s\n", FuncName);
 }

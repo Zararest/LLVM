@@ -1,5 +1,5 @@
-#define SIM_X_SIZE 512
-#define SIM_Y_SIZE 512
+#define SIM_X_SIZE 64
+#define SIM_Y_SIZE 64
 
 #include <stdint.h>
 

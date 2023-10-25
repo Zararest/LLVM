@@ -11,7 +11,7 @@
 #define MAX_R SIM_X_SIZE 
 
 #define SEED 1
-#define FRAMES_NUM 10090
+#define FRAMES_NUM 1
 
 const struct RGB BackGround = {10, 10, 10};
 
