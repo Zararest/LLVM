@@ -23,7 +23,8 @@ struct Instr {
   Instr(size_t Id, const std::string &Name) : Id{Id}, Name{Name} {}
 
   bool isCFInstr() const {
-    return false;
+    return Name == "call" || Name == "ret" ||
+           Name == "phi"  || Name == "br";
   }
 
   bool operator <(const Instr &Rhs) const {
@@ -186,11 +187,13 @@ struct Histogram {
         return std::nullopt;
       auto BundleEnd = DynIt + Size;
       auto CFIt = std::find_if(DynIt, BundleEnd,
-                                [](const Instr &I) {
+                                [&](Instr I) {
+                                  I.Name = getNameFromStatTrace(I);
                                   return I.isCFInstr();
                                 });
-      if (CFIt != BundleEnd)
+      if (CFIt < std::prev(BundleEnd))
         return std::nullopt;
+
       auto IBundle = InstrBundle{};
       std::transform(DynIt, BundleEnd, std::back_inserter(IBundle.Bundle),
                      [&](const Instr &I) {
@@ -208,7 +211,7 @@ struct Histogram {
         It->second++;
         return; 
       }
-      Map.emplace(Bundle, 0ull);
+      Map.emplace(Bundle, 1ull);
     } 
 
   public:

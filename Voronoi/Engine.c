@@ -1,8 +1,6 @@
 #include "Graphics.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#define NULL 0
 
 // Реализации диаграма Вороного с константным количеством точек
 
@@ -124,7 +122,6 @@ void app() {
   struct Dot ArrayOfDots[DOTS_NUM];
   initDots(ArrayOfDots);
   for (uint64_t i = 0; i < FRAMES_NUM; ++i) {
-    dumpDots(ArrayOfDots);
     changeState(ArrayOfDots);
     drawFrame(ArrayOfDots);
     simFlush();
