@@ -39,123 +39,40 @@ class Profiler : public FunctionPass {
            Name == "app";
   }
 
-  // Логирование базовых блоков выдает ошибку на этапе перевода в MIR
-
-  void generateBinOp(Instruction &I) {
-    assert(I.getParent());
-    auto &BB = *I.getParent();
-    auto &Ctx = BB.getContext();
-    auto &IB = getOrCreateIRBuilder(Ctx);
-    auto ParamTypes = ArrayRef<Type *>{/*Op*/  Type::getInt32Ty(Ctx),
-                                       /*Lhs*/ Type::getInt32Ty(Ctx),
-                                       /*Rhs*/ Type::getInt32Ty(Ctx),
-                                       /*Op name*/ IB.getInt8Ty()->getPointerTo(),
-                                       /*Instr Id*/ Type::getInt64Ty(Ctx)};
-    auto RetType = Type::getVoidTy(Ctx);
-    auto FuncType = FunctionType::get(RetType, ParamTypes, false);
-    auto Func = 
-      BB.getParent()->getParent()->getOrInsertFunction("logBinOp", FuncType);
-
-    IB.SetInsertPoint(&I);
-    // Вставлем после инструкции?
-    IB.SetInsertPoint(&BB, ++IB.GetInsertPoint());
-    auto *Op = dyn_cast<BinaryOperator>(&I);
-    assert(Op);
-    auto *Lhs = Op->getOperand(0);
-    auto *Rhs = Op->getOperand(1); 
-    auto *OpName = IB.CreateGlobalStringPtr(Op->getOpcodeName());
-    auto *InstrId = 
-      ConstantInt::get(IB.getInt64Ty(), reinterpret_cast<uint64_t>(&I));
-    auto Args = std::vector<Value *>{Op, Lhs, Rhs, OpName, InstrId};
-    IB.CreateCall(Func, Args);
+  bool isUnsupportedInstr(Instruction &I) {
+    return dyn_cast<BranchInst>(&I) || dyn_cast<PHINode>(&I);
+  }
+  
+  void makeStatLog(Instruction &I) {
+    dbgs() << reinterpret_cast<uint64_t>(&I) << " " 
+           << I.getOpcodeName() << "\n";
   }
 
-  void generateCall(Instruction &I) {
-    assert(I.getParent());
-    assert(I.getParent()->getParent());
-    auto &F = *I.getParent()->getParent();
-    auto &Ctx = F.getContext();
-    auto &IB = getOrCreateIRBuilder(Ctx);
-    auto ParamTypes = ArrayRef<Type *>{IB.getInt8Ty()->getPointerTo()};
-    auto RetType = Type::getVoidTy(Ctx);
-    
-    auto *Call = dyn_cast<CallInst>(&I);
-    assert(Call);
-    assert(Call->getCalledFunction());
-    auto CalleName = Call->getCalledFunction()->getName();
-    
-    if (isLoggerFunction(CalleName))
+  void makeDynLog(Instruction &I) {
+    if (isUnsupportedInstr(I))
       return;
 
-    auto FuncType = FunctionType::get(RetType, ParamTypes, false);
-    auto LogFuncName = isEngineFunc(CalleName) ? StringRef{"logFuncStart"} 
-                                               : StringRef{"logCallOp"};
-    auto Func = 
-      F.getParent()->getOrInsertFunction(LogFuncName, FuncType);
-    
-    /* !!! Надо сначала делать SetInsertPoint а потом CreateGlobalStringPtr !!!*/
-    IB.SetInsertPoint(&I);
-    auto *FuncName = IB.CreateGlobalStringPtr(CalleName);
-    auto Args = std::vector<Value *>{FuncName};
-    IB.CreateCall(Func, Args);
-  }
-
-  void generateRet(Instruction &I) {
-    assert(I.getParent());
-    assert(I.getParent()->getParent());
-    auto &F = *I.getParent()->getParent();
-    auto &Ctx = F.getContext();
-    auto &IB = getOrCreateIRBuilder(Ctx);
-    auto ParamTypes = ArrayRef<Type *>{IB.getInt8Ty()->getPointerTo()};
-    auto RetType = Type::getVoidTy(Ctx);
-    
-    auto FuncType = FunctionType::get(RetType, ParamTypes, false);
-    auto Func = 
-      F.getParent()->getOrInsertFunction("logFuncEnd", FuncType);
-    
-    IB.SetInsertPoint(&I);
-    auto *FuncName = IB.CreateGlobalStringPtr("ret");
-    auto Args = std::vector<Value *>{FuncName};
-    IB.CreateCall(Func, Args);
-  }
-
-  void generateCmp(Instruction &I) {
-    return;
     assert(I.getParent());
     auto &BB = *I.getParent();
     auto &Ctx = BB.getContext();
     auto &IB = getOrCreateIRBuilder(Ctx);
-    auto ParamTypes = ArrayRef<Type *>{/*Op*/  Type::getInt32Ty(Ctx),
-                                       /*Predicate*/ Type::getInt32Ty(Ctx),
-                                       /*Op name*/ IB.getInt8Ty()->getPointerTo(),
-                                       /*Instr Id*/ Type::getInt64Ty(Ctx)};
+    auto ParamTypes = ArrayRef<Type *>{/*Instr Id*/ Type::getInt64Ty(Ctx)};
     auto RetType = Type::getVoidTy(Ctx);
     
+    IB.SetInsertPoint(&I);
     auto FuncType = FunctionType::get(RetType, ParamTypes, false);
     auto Func = 
-      BB.getParent()->getParent()->getOrInsertFunction("logCmpOp", FuncType);
-
-    IB.SetInsertPoint(&I);
-    auto *Op = dyn_cast<CmpInst>(&I);
-    assert(Op);
-    auto Pred = ConstantInt::get(IB.getInt32Ty(), Op->getPredicate()); 
-    auto *OpName = IB.CreateGlobalStringPtr(Op->getOpcodeName());
+      BB.getParent()->getParent()->getOrInsertFunction("logInstr", FuncType);
     auto *InstrId = 
       ConstantInt::get(IB.getInt64Ty(), reinterpret_cast<uint64_t>(&I));
-    auto Args = std::vector<Value *>{Op, Pred, OpName, InstrId};
-    IB.CreateCall(Func, Args);
+    assert(InstrId);
+    IB.CreateCall(Func, InstrId);
   }
 
   void runOnBB(BasicBlock &BB) {
     for (auto &I : BB) {
-      if (auto *BinOp = dyn_cast<BinaryOperator>(&I))
-        generateBinOp(I);
-      if (auto *Call = dyn_cast<CallInst>(&I))
-        generateCall(I);
-      if (auto *Ret = dyn_cast<ReturnInst>(&I)) 
-        generateRet(I);
-      if (auto *Cmp = dyn_cast<CmpInst>(&I))
-        generateCmp(I);
+      makeDynLog(I);
+      makeStatLog(I);      
     }
   }
 

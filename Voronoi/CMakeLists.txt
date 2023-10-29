@@ -6,8 +6,12 @@ include_directories(SDL2Test ${SDL2_INCLUDE_DIRS})
 
 set(CMAKE_C_COMPILER clang-12)
 set(CMAKE_CPP_COMPILER clang++-12)
+set (CMAKE_CXX_STANDARD 17)
 
-include_directories(lib)
+include_directories(lib include)
+
+# Utils
+add_library(Utils STATIC Utils.cpp)
 
 # Main target
 message("Building files for target: ${PROJECT_NAME}")
@@ -29,6 +33,7 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${IR_FILE_NAME}"
 # Profiler
 find_package(LLVM REQUIRED CONFIG)
 add_library(Profiler SHARED Profiler-pass.cpp)
+# FIXME: strange dependecies 
 target_include_directories(Profiler PUBLIC /usr/lib/llvm-12/include)
 target_compile_definitions(Profiler PUBLIC ${LLVM_DEFINITIONS})
 set_target_properties(Profiler PROPERTIES POSITION_INDEPENDENT_CODE True)
@@ -44,3 +49,10 @@ message("Current coompiler ${CMAKE_C_COMPILER}")
 # I don't know how to get target path right
 # As long as I use clang-12, no additional options are needed
 target_compile_options(${PROJECT_NAME}-profiled PUBLIC "-fplugin=${CMAKE_CURRENT_BINARY_DIR}/libProfiler.so")
+
+# Trace analyzer
+add_executable(Analyzer Trace-analyzer.cpp)
+target_include_directories(Analyzer PUBLIC ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(Analyzer PUBLIC ${LLVM_DEFINITIONS})
+llvm_map_components_to_libnames(llvm_libs support core irreader)
+target_link_libraries(Analyzer ${llvm_libs} Utils)
