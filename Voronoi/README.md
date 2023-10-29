@@ -105,45 +105,43 @@ getelementptr          load : 122910
           sub           sub : 81920
           sub        select : 81920
          icmp           sub : 81920
-         icmp          call : 45064
-         load          call : 41562
+         icmp            br : 45140
           mul           add : 40970
-         load getelementptr : 40970
 getelementptr          call : 40961
        select        select : 40960
           mul           mul : 40960
           mul          icmp : 40960
          load           mul : 40960
+         load getelementptr : 40960
+         load          call : 40960
          icmp          icmp : 40960
          icmp           and : 40960
           and        select : 40960
+        trunc            br : 4160
          icmp         trunc : 4096
-        trunc          call : 3559
-        trunc getelementptr : 631
+         load            br : 612
 getelementptr       bitcast : 601
       bitcast          load : 601
           shl           xor : 100
 getelementptr         store : 80
-         icmp           add : 64
           xor           shl : 50
           xor          lshr : 50
         store           shl : 50
          lshr           xor : 50
           xor         trunc : 30
+        trunc getelementptr : 30
           xor           and : 20
         store getelementptr : 20
-         icmp getelementptr : 20
           and getelementptr : 20
-        store          call : 10
+        store            br : 10
         store           add : 10
          sext           mul : 10
          load          sext : 10
          load          icmp : 10
+         icmp getelementptr : 10
 getelementptr          icmp : 10
           add         store : 10
         store           ret : 1
-         icmp         store : 1
-         icmp           ret : 1
       bitcast          call : 1
        alloca       bitcast : 1
 ```
@@ -153,7 +151,6 @@ getelementptr          icmp : 10
           sub           sub        select : 81920
           sub        select          call : 81920
          icmp           sub           sub : 81920
-getelementptr          load getelementptr : 40970
        select        select          call : 40960
           mul           mul           add : 40960
           mul          icmp          icmp : 40960
@@ -163,14 +160,12 @@ getelementptr          load getelementptr : 40970
          icmp          icmp           and : 40960
          icmp           and        select : 40960
 getelementptr          load           mul : 40960
+getelementptr          load getelementptr : 40960
 getelementptr          load          call : 40960
           and        select        select : 40960
-         icmp         trunc          call : 3495
-        trunc getelementptr       bitcast : 601
-         icmp         trunc getelementptr : 601
+         icmp         trunc            br : 4096
 getelementptr       bitcast          load : 601
-      bitcast          load          call : 601
-         icmp           add          call : 64
+      bitcast          load            br : 601
           xor           shl           xor : 50
           xor          lshr           xor : 50
         store           shl           xor : 50
@@ -183,7 +178,6 @@ getelementptr         store           shl : 50
           xor           and getelementptr : 20
         store getelementptr         store : 20
           shl           xor           and : 20
-         icmp getelementptr          load : 20
 getelementptr         store getelementptr : 20
           and getelementptr         store : 20
         store           add          call : 10
@@ -191,13 +185,13 @@ getelementptr         store getelementptr : 20
           mul           add         store : 10
          load          sext           mul : 10
          load          icmp getelementptr : 10
-         load getelementptr          icmp : 10
+         icmp getelementptr          load : 10
 getelementptr         store           add : 10
 getelementptr          load          sext : 10
 getelementptr          load          icmp : 10
-getelementptr          icmp getelementptr : 10
-          add         store          call : 10
-         icmp         store           ret : 1
+getelementptr          load            br : 10
+getelementptr          icmp            br : 10
+          add         store            br : 10
        alloca       bitcast          call : 1
 ```
 
@@ -209,8 +203,6 @@ getelementptr          icmp getelementptr : 10
          icmp           and        select        select          call : 40960
 getelementptr          load           mul          icmp          icmp : 40960
 getelementptr          load getelementptr          load          call : 40960
-        trunc getelementptr       bitcast          load          call : 601
-         icmp         trunc getelementptr       bitcast          load : 601
           xor          lshr           xor           shl           xor : 50
         store           shl           xor          lshr           xor : 50
           shl           xor          lshr           xor           shl : 50
@@ -229,18 +221,13 @@ getelementptr         store           shl           xor          lshr : 50
         trunc getelementptr         store           add          call : 10
         store getelementptr         store           shl           xor : 10
         store getelementptr         store getelementptr         store : 10
-         sext           mul           add         store          call : 10
+         sext           mul           add         store            br : 10
          load          sext           mul           add         store : 10
-         load          icmp getelementptr          load getelementptr : 10
-         load getelementptr          icmp getelementptr          load : 10
-         icmp getelementptr          load          sext           mul : 10
-         icmp getelementptr          load getelementptr          icmp : 10
+         load          icmp getelementptr          load            br : 10
 getelementptr         store getelementptr         store           shl : 10
 getelementptr         store getelementptr         store getelementptr : 10
 getelementptr          load          sext           mul           add : 10
 getelementptr          load          icmp getelementptr          load : 10
-getelementptr          load getelementptr          icmp getelementptr : 10
-getelementptr          icmp getelementptr          load          sext : 10
 ```
 
 Много call инструкций - следствие вызова вспомогательных функций llvm(например lifetime.start)

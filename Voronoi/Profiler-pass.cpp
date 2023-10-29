@@ -40,7 +40,7 @@ class Profiler : public FunctionPass {
   }
 
   bool isUnsupportedInstr(Instruction &I) {
-    return dyn_cast<BranchInst>(&I) || dyn_cast<PHINode>(&I);
+    return dyn_cast<PHINode>(&I);
   }
   
   void makeStatLog(Instruction &I) {
