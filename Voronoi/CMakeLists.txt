@@ -6,7 +6,9 @@ include_directories(SDL2Test ${SDL2_INCLUDE_DIRS})
 
 set(CMAKE_C_COMPILER clang-12)
 set(CMAKE_CPP_COMPILER clang++-12)
-set (CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17)
+
+set(FLAGS_FOR_CODE_SIZE -fno-unroll-loops)
 
 include_directories(lib include)
 
@@ -26,7 +28,7 @@ add_library(IR-dump Engine.c)
 set_target_properties(IR-dump PROPERTIES SUFFIX "")
 set_target_properties(IR-dump PROPERTIES PREFIX "")
 set_target_properties(IR-dump PROPERTIES OUTPUT_NAME ${IR_FILE_NAME})
-target_compile_options(IR-dump PUBLIC ${CMAKE_C_FLAGS} -O1 -S -emit-llvm)
+target_compile_options(IR-dump PUBLIC ${CMAKE_C_FLAGS} -O2 -S -emit-llvm ${FLAGS_FOR_CODE_SIZE})
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${IR_FILE_NAME}"
         DESTINATION  ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -41,7 +43,7 @@ set_target_properties(Profiler PROPERTIES POSITION_INDEPENDENT_CODE True)
 # IR with profiler
 find_package(SDL2 REQUIRED)
 add_executable(${PROJECT_NAME}-profiled Engine.c lib/Graphics.c Logger.c)
-target_compile_options(${PROJECT_NAME}-profiled PUBLIC -O2)
+target_compile_options(${PROJECT_NAME}-profiled PUBLIC -O2 ${FLAGS_FOR_CODE_SIZE})
 target_link_libraries(${PROJECT_NAME}-profiled ${SDL2_LIBRARIES})
 target_link_libraries(${PROJECT_NAME}-profiled m)
 add_dependencies(${PROJECT_NAME}-profiled Profiler)

@@ -28,6 +28,7 @@ struct Dot {
   struct RGB Colour;
 };
 
+__attribute__((noinline))
 uint64_t xorshift() {
   static uint64_t Seed = SEED;
   Seed ^= Seed << 13;
@@ -52,6 +53,7 @@ void dumpDots(const struct Dot *ArrayOfDots) {
   #endif
 }
 
+__attribute__((noinline))
 void changePosition(struct Dot *CurDot) {
   CurDot->R = 0;
   CurDot->GrowthSpeed = GROWTH_SPEED;
@@ -63,6 +65,7 @@ void changePosition(struct Dot *CurDot) {
   CurDot->Colour.B = xorshift();
 }
 
+__attribute__((noinline))
 void updateDot(struct Dot *CurDot) { 
   if (CurDot->GrowthDirection == -1 && CurDot->R <= CurDot->GrowthSpeed) {
     changePosition(CurDot);
@@ -74,17 +77,20 @@ void updateDot(struct Dot *CurDot) {
   CurDot->R += CurDot->GrowthSpeed * CurDot->GrowthDirection;
 }
 
+__attribute__((noinline))
 void changeState(struct Dot *ArrayOfDots) {
   for (int i = 0; i < DOTS_NUM; ++i)
     updateDot(&ArrayOfDots[i]);
 }
 
+__attribute__((noinline))
 uint64_t distance(uint64_t X1, uint64_t Y1, uint64_t X2, uint64_t Y2) {
   uint64_t dX = X2 > X1 ? (X2 - X1) : (X1 - X2);
   uint64_t dY = Y2 > Y1 ? (Y2 - Y1) : (Y1 - Y2);
   return dX * dX + dY * dY;
 }
 
+__attribute__((noinline))
 const struct Dot *getNearestDot(uint64_t X, uint64_t Y,
                                 const struct Dot *ArrayOfDots) {
   const struct Dot *NearestDot = NULL;
@@ -101,6 +107,7 @@ const struct Dot *getNearestDot(uint64_t X, uint64_t Y,
   return NearestDot;
 }
 
+__attribute__((noinline))
 void drawFrame(const struct Dot *ArrayOfDots) {
   for (uint64_t X = 0; X < SIM_X_SIZE; ++X)
     for (uint64_t Y = 0; Y < SIM_Y_SIZE; ++Y) {
@@ -113,6 +120,7 @@ void drawFrame(const struct Dot *ArrayOfDots) {
     } 
 }
 
+__attribute__((noinline))
 void initDots(struct Dot *ArrayOfDots) {
   for (int i = 0; i < DOTS_NUM; ++i)
     changePosition(&ArrayOfDots[i]);
