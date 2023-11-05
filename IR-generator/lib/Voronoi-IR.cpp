@@ -3,8 +3,11 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include "Graphics.h"
 
 #include <memory>
 #include <vector>
@@ -96,7 +99,7 @@ void changePositionGen() {
   auto *Gep2 = IB->CreateInBoundsGEP(Dot_t, DotStruct, Values);
   IB->CreateAlignedStore(Const64i5, Gep2, StoreAlign);
 
-  Values = std::vector<Value *>{Const64i0, Const32i2};
+  Values = std::vector<Value *>{Const64i0, Const32i3};
   auto *Gep3 = IB->CreateInBoundsGEP(Dot_t, DotStruct, Values);
   IB->CreateAlignedStore(Const32i1, Gep3, StoreAlign);
 
@@ -190,7 +193,7 @@ void updateDotGen() {
 
   auto *Phi = IB->CreatePHI(IB->getInt32Ty(), 2);
   Phi->addIncoming(Const32ineg1, BB4);
-  Phi->addIncoming(Load1, Entry);
+  Phi->addIncoming(Load1, BB3);
 
   Values = std::vector<Value *>{Const64i0, Const32i2};
   auto *Gep5 = IB->CreateInBoundsGEP(Dot_t, DotStruct, Values);
@@ -336,7 +339,7 @@ void drawFrameGen() {
   auto *BB6 = BasicBlock::Create(*Ctx, "BB6", drawFrame);
   IB->SetInsertPoint(Entry);
 
-  auto *DotStruct = getNearestDot->getArg(2);
+  auto *DotStruct = drawFrame->getArg(0);
 
   IB->CreateBr(BB1);
 
@@ -391,7 +394,7 @@ void drawFrameGen() {
 
   IB->CreateCondBr(Icmp3, BB3, BB4);
 
-  Phi1->addIncoming(Const64i0, BB1);
+  Phi1->addIncoming(Const64i0, Entry);
   Phi1->addIncoming(Add1, BB3);
 
   Phi2->addIncoming(Const64i0, BB1);
@@ -438,7 +441,7 @@ void initDotsGen() {
 void appGen() {
   auto *Entry = BasicBlock::Create(*Ctx, "Entry", app);
   IB->SetInsertPoint(Entry);
-  
+
   auto *DotsArray_t = ArrayType::get(Dot_t, 10);
 
   auto *Alloca = IB->CreateAlloca(DotsArray_t);
@@ -588,4 +591,29 @@ int main() {
   appGen();
   
   M->print(outs(), nullptr);
+
+  outs() << "\n\n==ModuleVerifier==\n";
+  assert(verifyModule(*M, &outs()));
+
+  outs() << "\n\n==Execution==\n";
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter();
+
+  auto *EE = EngineBuilder(std::move(M)).create();
+  auto FuncCreator = [&](const std::string &FuncName) {
+    if (FuncName == "simFlush")
+      return reinterpret_cast<void *>(lib::simFlush);
+    if (FuncName == "simPutPixel")
+      return reinterpret_cast<void *>(lib::simPutPixel);
+    llvm_unreachable("Unknown function");
+  };
+  EE->InstallLazyFunctionCreator(FuncCreator);
+  EE->finalizeObject();
+  auto Args = std::vector<GenericValue>{};
+  
+  lib::simInit();
+  EE->runFunction(app, Args);
+  lib::simExit();
+
+  outs() << "==End==\n";
 }

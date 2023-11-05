@@ -198,7 +198,6 @@ define dso_local void @drawFrame(%struct.Dot* readonly %0) local_unnamed_addr #6
 9:                                                ; preds = %2, %18
   %10 = phi i64 [ 0, %2 ], [ %20, %18 ]
   %11 = tail call %struct.Dot* @getNearestDot(i64 %3, i64 %10, %struct.Dot* %0)
- 
   %12 = icmp eq %struct.Dot* %11, null
   %13 = trunc i64 %10 to i32
   br i1 %12, label %18, label %14
