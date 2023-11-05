@@ -155,13 +155,18 @@ define dso_local %struct.Dot* @getNearestDot(i64 %0, i64 %1, %struct.Dot* readon
   %7 = phi i64 [ 48830, %3 ], [ %21, %5 ]
   %8 = phi i64 [ 0, %3 ], [ %23, %5 ]
   %9 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8
+
   %10 = getelementptr inbounds %struct.Dot, %struct.Dot* %9, i64 0, i32 0
   %11 = load i64, i64* %10, align 8, !tbaa !12
+
   %12 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8, i32 1
   %13 = load i64, i64* %12, align 8, !tbaa !13
+
   %14 = tail call i64 @distance(i64 %0, i64 %1, i64 %11, i64 %13)
+
   %15 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8, i32 4
   %16 = load i64, i64* %15, align 8, !tbaa !6
+
   %17 = mul i64 %16, %16
   %18 = icmp ult i64 %14, %17
   %19 = icmp ult i64 %14, %7
@@ -193,6 +198,7 @@ define dso_local void @drawFrame(%struct.Dot* readonly %0) local_unnamed_addr #6
 9:                                                ; preds = %2, %18
   %10 = phi i64 [ 0, %2 ], [ %20, %18 ]
   %11 = tail call %struct.Dot* @getNearestDot(i64 %3, i64 %10, %struct.Dot* %0)
+ 
   %12 = icmp eq %struct.Dot* %11, null
   %13 = trunc i64 %10 to i32
   br i1 %12, label %18, label %14
