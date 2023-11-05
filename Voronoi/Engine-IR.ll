@@ -45,14 +45,17 @@ define dso_local void @changePosition(%struct.Dot* nocapture %0) local_unnamed_a
   %9 = and i64 %8, 63
   %10 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 1
   store i64 %9, i64* %10, align 8, !tbaa !13
+
   %11 = tail call i64 @xorshift()
   %12 = trunc i64 %11 to i8
   %13 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 0
   store i8 %12, i8* %13, align 8, !tbaa !14
+
   %14 = tail call i64 @xorshift()
   %15 = trunc i64 %14 to i8
   %16 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 1
-  store i8 %15, i8* %16, align 1, !tbaa !15
+  store i8 %15, i8* %16, align 1, !tbaa !
+  
   %17 = tail call i64 @xorshift()
   %18 = trunc i64 %17 to i8
   %19 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 2
