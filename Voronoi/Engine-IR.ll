@@ -1,5 +1,5 @@
 !<arch>
-Engine.c.o/     0           0     0     644     14013     `
+Engine.c.o/     0           0     0     644     14331     `
 ; ModuleID = '/home/ii-sc/Education/LLVM/Voronoi/Engine.c'
 source_filename = "/home/ii-sc/Education/LLVM/Voronoi/Engine.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
@@ -45,17 +45,14 @@ define dso_local void @changePosition(%struct.Dot* nocapture %0) local_unnamed_a
   %9 = and i64 %8, 63
   %10 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 1
   store i64 %9, i64* %10, align 8, !tbaa !13
-
   %11 = tail call i64 @xorshift()
   %12 = trunc i64 %11 to i8
   %13 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 0
   store i8 %12, i8* %13, align 8, !tbaa !14
-
   %14 = tail call i64 @xorshift()
   %15 = trunc i64 %14 to i8
   %16 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 1
-  store i8 %15, i8* %16, align 1, !tbaa !
-  
+  store i8 %15, i8* %16, align 1, !tbaa !15
   %17 = tail call i64 @xorshift()
   %18 = trunc i64 %17 to i8
   %19 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 2
@@ -155,18 +152,13 @@ define dso_local %struct.Dot* @getNearestDot(i64 %0, i64 %1, %struct.Dot* readon
   %7 = phi i64 [ 48830, %3 ], [ %21, %5 ]
   %8 = phi i64 [ 0, %3 ], [ %23, %5 ]
   %9 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8
-
   %10 = getelementptr inbounds %struct.Dot, %struct.Dot* %9, i64 0, i32 0
   %11 = load i64, i64* %10, align 8, !tbaa !12
-
   %12 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8, i32 1
   %13 = load i64, i64* %12, align 8, !tbaa !13
-
   %14 = tail call i64 @distance(i64 %0, i64 %1, i64 %11, i64 %13)
-
   %15 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8, i32 4
   %16 = load i64, i64* %15, align 8, !tbaa !6
-
   %17 = mul i64 %16, %16
   %18 = icmp ult i64 %14, %17
   %19 = icmp ult i64 %14, %7
@@ -241,11 +233,20 @@ define dso_local void @app() local_unnamed_addr #8 {
   call void @llvm.lifetime.start.p0i8(i64 480, i8* nonnull %2) #9
   %3 = getelementptr inbounds [10 x %struct.Dot], [10 x %struct.Dot]* %1, i64 0, i64 0
   call void @initDots(%struct.Dot* nonnull %3)
+  br label %5
+
+4:                                                ; preds = %5
+  call void @llvm.lifetime.end.p0i8(i64 480, i8* nonnull %2) #9
+  ret void
+
+5:                                                ; preds = %0, %5
+  %6 = phi i64 [ 0, %0 ], [ %7, %5 ]
   call void @changeState(%struct.Dot* nonnull %3)
   call void @drawFrame(%struct.Dot* nonnull %3)
   call void (...) @simFlush() #9
-  call void @llvm.lifetime.end.p0i8(i64 480, i8* nonnull %2) #9
-  ret void
+  %7 = add nuw nsw i64 %6, 1
+  %8 = icmp eq i64 %7, 100
+  br i1 %8, label %4, label %5, !llvm.loop !24
 }
 
 declare dso_local void @simFlush(...) local_unnamed_addr #7
@@ -288,4 +289,5 @@ attributes #9 = { nounwind }
 !21 = distinct !{!21, !18, !19}
 !22 = distinct !{!22, !18, !19}
 !23 = distinct !{!23, !18, !19}
+!24 = distinct !{!24, !18, !19}
 

@@ -51,6 +51,7 @@ ConstantInt *Const32i5 = nullptr;
 ConstantInt *Const64i10 = nullptr;
 ConstantInt *Const64i63 = nullptr;
 ConstantInt *Const64i64 = nullptr;
+ConstantInt *Const64i100 = nullptr;
 ConstantInt *Const64i48830 = nullptr;
 ConstantInt *Const24i657930 = nullptr;
 
@@ -64,7 +65,7 @@ void xorShiftGen() {
   auto *GVSeed = 
     new GlobalVariable(*M, SeedT,
                       /*isConstant*/false,
-                      /*Linkage*/GlobalValue::CommonLinkage,
+                      /*Linkage*/GlobalValue::ExternalLinkage,
                       /*Initializer*/ Constant::getIntegerValue(SeedT, SeedVal),
                       /*Name*/ "Seed");
   GVSeed->setAlignment(SeedAlign);
@@ -440,6 +441,8 @@ void initDotsGen() {
 // Генерация для одного фрейма
 void appGen() {
   auto *Entry = BasicBlock::Create(*Ctx, "Entry", app);
+  auto *BB1 = BasicBlock::Create(*Ctx, "BB1", app);
+  auto *BB2 = BasicBlock::Create(*Ctx, "BB2", app);
   IB->SetInsertPoint(Entry);
 
   auto *DotsArray_t = ArrayType::get(Dot_t, 10);
@@ -452,13 +455,30 @@ void appGen() {
 
   auto Args = std::vector<Value *>{Gep};
   IB->CreateCall(initDots, Args);
+
+  IB->CreateBr(BB2);
+
+  IB->SetInsertPoint(BB1);
+
+  IB->CreateRetVoid();
+
+  IB->SetInsertPoint(BB2);
+
+  auto *Phi = IB->CreatePHI(IB->getInt64Ty(), 2);
+
   IB->CreateCall(changeState, Args);
   IB->CreateCall(drawFrame, Args);
 
   Args = std::vector<Value *>{};
   IB->CreateCall(simFlush, Args);
 
-  IB->CreateRetVoid();
+  auto *Add = IB->CreateAdd(Phi, Const64i1);
+  auto *Icmp = IB->CreateICmpEQ(Add, Const64i100);
+
+  IB->CreateCondBr(Icmp, BB1, BB2);
+
+  Phi->addIncoming(Const64i0, Entry);
+  Phi->addIncoming(Add, BB2);
 }
 
 void createStructs() {
@@ -530,8 +550,7 @@ void createFunctions() {
   simPutPixel = 
     M->getOrInsertFunction("simPutPixel", simPutPixel_t);
 
-  auto simFlush_t = FunctionType::get(IB->getVoidTy(), 
-                                      IB->getVoidTy(), 
+  auto simFlush_t = FunctionType::get(IB->getVoidTy(),
                                       /*isVarArg*/ false);
   simFlush = 
     M->getOrInsertFunction("simFlush", simFlush_t);
@@ -542,8 +561,7 @@ void createFunctions() {
   initDots = 
     Function::Create(initDots_t, Function::ExternalLinkage, "initDots", *M);
 
-  auto *app_t = FunctionType::get(IB->getVoidTy(), 
-                                  IB->getVoidTy(), 
+  auto *app_t = FunctionType::get(IB->getVoidTy(),
                                   /*isVarArg*/ false);
   app = 
     Function::Create(app_t, Function::ExternalLinkage, "app", *M);
@@ -567,6 +585,7 @@ void createConstants() {
   Const64i10 = ConstantInt::get(IB->getInt64Ty(), 10);
   Const64i63 = ConstantInt::get(IB->getInt64Ty(), 63);
   Const64i64 = ConstantInt::get(IB->getInt64Ty(), 64);
+  Const64i100 = ConstantInt::get(IB->getInt64Ty(), 100);
   Const64i48830 = ConstantInt::get(IB->getInt64Ty(), 48830);
   Const24i657930 = ConstantInt::get(Int24_t, 657930);
 }
@@ -593,7 +612,8 @@ int main() {
   M->print(outs(), nullptr);
 
   outs() << "\n\n==ModuleVerifier==\n";
-  assert(verifyModule(*M, &outs()));
+  assert(!verifyModule(*M, &outs()));
+  outs() << "==OK==\n";
 
   outs() << "\n\n==Execution==\n";
   InitializeNativeTarget();
