@@ -33,18 +33,25 @@ define dso_local void @dumpDots(%struct.Dot* nocapture %0) local_unnamed_addr #1
 define dso_local void @changePosition(%struct.Dot* nocapture %0) local_unnamed_addr #0 {
   %2 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 4
   store i64 0, i64* %2, align 8, !tbaa !6
+
   %3 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 2
   store i64 5, i64* %3, align 8, !tbaa !10
+  
   %4 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 3
   store i32 1, i32* %4, align 8, !tbaa !11
+  
   %5 = tail call i64 @xorshift()
   %6 = and i64 %5, 63
+  
   %7 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 0
   store i64 %6, i64* %7, align 8, !tbaa !12
+  
   %8 = tail call i64 @xorshift()
   %9 = and i64 %8, 63
+  
   %10 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 1
   store i64 %9, i64* %10, align 8, !tbaa !13
+  
   %11 = tail call i64 @xorshift()
   %12 = trunc i64 %11 to i8
   %13 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 0
@@ -57,6 +64,7 @@ define dso_local void @changePosition(%struct.Dot* nocapture %0) local_unnamed_a
   %18 = trunc i64 %17 to i8
   %19 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 5, i32 2
   store i8 %18, i8* %19, align 2, !tbaa !16
+  
   ret void
 }
 
@@ -64,9 +72,12 @@ define dso_local void @changePosition(%struct.Dot* nocapture %0) local_unnamed_a
 define dso_local void @updateDot(%struct.Dot* nocapture %0) local_unnamed_addr #0 {
   %2 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 3
   %3 = load i32, i32* %2, align 8, !tbaa !11
+
   %4 = icmp eq i32 %3, -1
+  
   %5 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 4
   %6 = load i64, i64* %5, align 8, !tbaa !6
+
   br i1 %4, label %7, label %12
 
 7:                                                ; preds = %1
@@ -75,26 +86,29 @@ define dso_local void @updateDot(%struct.Dot* nocapture %0) local_unnamed_addr #
   %10 = icmp ugt i64 %6, %9
   br i1 %10, label %12, label %11
 
+
 11:                                               ; preds = %7
   tail call void @changePosition(%struct.Dot* nonnull %0)
   br label %23
 
 12:                                               ; preds = %1, %7
-  %13 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 4
   %14 = icmp ugt i64 %6, 64
   br i1 %14, label %15, label %16
 
 15:                                               ; preds = %12
-  store i32 -1, i32* %2, align 8, !tbaa !11
+  %2.1 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 3
+  store i32 -1, i32* %2.1, align 8, !tbaa !11
   br label %16
 
 16:                                               ; preds = %15, %12
   %17 = phi i32 [ -1, %15 ], [ %3, %12 ]
   %18 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 2
   %19 = load i64, i64* %18, align 8, !tbaa !10
+
   %20 = sext i32 %17 to i64
   %21 = mul i64 %19, %20
   %22 = add i64 %21, %6
+  %13 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 0, i32 4
   store i64 %22, i64* %13, align 8, !tbaa !6
   br label %23
 
@@ -112,6 +126,7 @@ define dso_local void @changeState(%struct.Dot* nocapture %0) local_unnamed_addr
 3:                                                ; preds = %1, %3
   %4 = phi i64 [ 0, %1 ], [ %6, %3 ]
   %5 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 %4
+  
   tail call void @updateDot(%struct.Dot* %5)
   %6 = add nuw nsw i64 %4, 1
   %7 = icmp eq i64 %6, 10
@@ -152,13 +167,18 @@ define dso_local %struct.Dot* @getNearestDot(i64 %0, i64 %1, %struct.Dot* readon
   %7 = phi i64 [ 48830, %3 ], [ %21, %5 ]
   %8 = phi i64 [ 0, %3 ], [ %23, %5 ]
   %9 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8
+  
   %10 = getelementptr inbounds %struct.Dot, %struct.Dot* %9, i64 0, i32 0
   %11 = load i64, i64* %10, align 8, !tbaa !12
+  
   %12 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8, i32 1
   %13 = load i64, i64* %12, align 8, !tbaa !13
+  
   %14 = tail call i64 @distance(i64 %0, i64 %1, i64 %11, i64 %13)
+  
   %15 = getelementptr inbounds %struct.Dot, %struct.Dot* %2, i64 %8, i32 4
   %16 = load i64, i64* %15, align 8, !tbaa !6
+  
   %17 = mul i64 %16, %16
   %18 = icmp ult i64 %14, %17
   %19 = icmp ult i64 %14, %7
@@ -175,7 +195,7 @@ define dso_local void @drawFrame(%struct.Dot* readonly %0) local_unnamed_addr #6
   br label %2
 
 2:                                                ; preds = %1, %6
-  %3 = phi i64 [ 0, %1 ], [ %7, %6 ]
+  %3 = phi i64 [ 0, %1 ], [ %7, %6 ]        ;t0
   %4 = trunc i64 %3 to i32
   br label %9
 
@@ -188,7 +208,7 @@ define dso_local void @drawFrame(%struct.Dot* readonly %0) local_unnamed_addr #6
   br i1 %8, label %5, label %2, !llvm.loop !21
 
 9:                                                ; preds = %2, %18
-  %10 = phi i64 [ 0, %2 ], [ %20, %18 ]
+  %10 = phi i64 [ 0, %2 ], [ %20, %18 ]           ; t2
   %11 = tail call %struct.Dot* @getNearestDot(i64 %3, i64 %10, %struct.Dot* %0)
   %12 = icmp eq %struct.Dot* %11, null
   %13 = trunc i64 %10 to i32
@@ -220,6 +240,7 @@ define dso_local void @initDots(%struct.Dot* nocapture %0) local_unnamed_addr #2
 3:                                                ; preds = %1, %3
   %4 = phi i64 [ 0, %1 ], [ %6, %3 ]
   %5 = getelementptr inbounds %struct.Dot, %struct.Dot* %0, i64 %4
+  
   tail call void @changePosition(%struct.Dot* %5)
   %6 = add nuw nsw i64 %4, 1
   %7 = icmp eq i64 %6, 10

@@ -13,24 +13,42 @@ make
 
 # ISA
 
-!!! теперь все поля в Dot i64 !!!
+## Инструкции
 
-Особые инструкции:
+!!! теперь все поля в Dot i64 !!!
+!!! в функции updateDot я могу перенести вниз %13 !!!
+
+Результат инструкции записывается как `instr args -> val` 
+
+Особые инструкции (возврщаемое значение записано до инструкции):
 ```
-[incJump]: (add + icmp + br) (RegToInc) (ImmToCmp) (Label1) (Label2)
-  Tmp = add i64 RegToInc, 1
-  Cond = icmp eq i64 Tmp, ImmToCmp
+[incJump]: (Val) (add + icmp + br) (RegToInc) (ImmToCmp) (Label1) (Label2)
+  Val = add i64 RegToInc, 1
+  Cond = icmp eq i64 Val, ImmToCmp
   br i1 Cond, Label1, Label2
 
-[loadDotField]: (Val) (gep + load) (StructPtr) (FieldOffs)
-  Addr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 FieldOffs
+[loadDotField]: (Val) (gep + load) (StructPtr) (ImmOff)
+  Addr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff
   Val = load i64, i64* Addr, align 8
 
-[storeDotFiled]: (gep + store) (StructPtr) (FiledOffs) (ValToStore)
-  Ptr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 FiledOffs
+[storeDotFiled]: (gep + store) (StructPtr) (ImmOff) (ValToStore)
+  Ptr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff
   store i64 ValToStore, i64* Ptr, align 8
 
-[initRgb]: (...) (StructPtr)
+[storeDotFiledImm]: (gep + store) (StructPtr) (ImmOff) (ImmToStore)
+  Ptr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff
+  store i64 ImmToStore, i64* Ptr, align 8
+
+[jumpIfDot]: (gep + icmp + br) (StructPtr) (ImmOff) (ValCmpWith) (Label1) (Label2)
+  Ptr = getelementptr inbounds %struct.Dot, %struct.Dot* StructPtr, i64 0, i32 ImmOff
+  Field = load i64, i64* Ptr, align 8
+  Cond = icmp ugt i64 ValCmpWith, Filed
+  br i1 Cond, label Label1, label Label2
+
+[getDotAddr]: (Addr) (gep) (StructPtr) (ValOff)
+  Addr = getelementptr inbounds %struct.Dot, %struct.Dot* StructDot, i64 ValOff
+
+[initRgb]: (...) (StructPtr) (Seed)
   %10 = call i64 @xorshift()
   %11 = trunc i64 %10 to i8
   %12 = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 5, i32 0
@@ -44,7 +62,10 @@ make
   %18 = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 5, i32 2
   store i8 %17, i8* %18, align 8
 
-[loadRgb]: (Val) (gep + bitcast + )
+[loadRgb]: (Val) (gep + bitcast + load) (StructPtr)
+  Addr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 5
+  Bitcast = bitcast %struct.RGB* Addr to i24*
+  Val = load i24, i24* Bitcast, align 8
 
 [cmpTwo]: (Val) (icmp + icmp + and) (ValCmpWith) (Val1) (Val2)
   Cmp1 = icmp ult i64 ValCmpWith, Val1
@@ -56,9 +77,93 @@ make
   x2Square = mul i64 x2, x2
   norm = add i64 x1Square, x2Square 
 
+[xorshift]: (Val) (xorshift) (Seed)
+  %1 = load i64, i64* Seed, align 8, !tbaa !2
+  %2 = shl i64 %1, 13
+  %3 = xor i64 %2, %1
+  %4 = lshr i64 %3, 7
+  %5 = xor i64 %4, %3
+  %6 = shl i64 %5, 17
+  %7 = xor i64 %6, %5
+  store i64 %7, i64* Seed, align 8, !tbaa !2
+  ret i64 %7
+
+[spill]: (spill) (Reg)
+  adds register to the stack
+
+[restore]: (restore) (Reg)
+  restores register from spill by name
 ```
 
 Обычные инструкции:
 ```
+[and] (Val) (and) (ValIn) (Imm)
+  Val = and i64 ValIn, Imm
 
+[ret] (ret)
+  ret void
+
+[cmpEqImm] (Val) (icmp) (ValIn) (Imm)
+  Val = icmp eq i64 ValIn, Imm 
+
+[brCond] (br) (Cond) (Label1) (Label2)
+  br i1 Cond, label Label1, label Label2
+
+[br] (br) (Label)
+  br label Label
+
+[call] (call) (FuncName)
+  call FuncName(...) #аргументы будут переданы через регистры#
+
+[cmpUGT] (Val) (icmp) (ValIn) (Imm)
+  Val = icmp ugt i64 ValIn, Imm
+
+[li] (Val) (li) (Imm)
+  Val = Imm
+
+[mul]
+
+[add]
+
+[select]: (Val) (select) (Cond) (ValIn1) (ValIn2)
+  Val = select i1 Cond, i64 ValIn1, i64 ValIn2
+
+[mv]
 ```
+
+Регистры:
+```
+a0-5 - аргументы функции (не сохраняются при call)
+r0 - возвращаемое значение
+t0-11 - общие регистры
+```
+
+Перед `сall` делается снапшот всех `t` регистров.
+Поскольку в данной программе нету рекурсии, возможно реализовать отдельный регистровый файл для каждой функции. Таким образом при загрузке регистров будут использованы разные начальный адерса.
+
+Также сама функция обязана восстановить значения `a` регистров. 
+
+Обозначения функций:
+```
+.text
+
+...
+
+<funcName> - начало функции
+  ...
+BB1:
+  ...
+```
+
+Глобальные переменные:
+```
+.globals
+  Name Val
+```
+
+Комментарии:
+```
+# ... #
+```
+
+Нулевой указатель это null
