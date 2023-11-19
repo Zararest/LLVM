@@ -36,7 +36,7 @@ class Profiler : public FunctionPass {
     return Name == "changePosition" || Name == "updateDot" ||
            Name == "changeState" || Name == "getNearestDot" ||
            Name == "drawFrame" || Name == "initDots" ||
-           Name == "app";
+           Name == "distance" || Name == "app";
   }
 
   bool isUnsupportedInstr(Instruction &I) {

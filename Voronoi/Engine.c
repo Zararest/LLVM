@@ -21,7 +21,7 @@ struct Dot {
   // Увеличение радиуса за один фрейм
   uint64_t GrowthSpeed;
   // 1 - увеличивается, -1 - уменьшается
-  int GrowthDirection;
+  long long GrowthDirection;
   // Текущий радиус
   uint64_t R;
   // Цвет соответствующей области

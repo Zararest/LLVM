@@ -308,7 +308,7 @@ void getNearestDotGen() {
   auto *Mul = IB->CreateMul(Load3, Load3);
   auto *Icmp1 = IB->CreateICmpULT(Call, Mul);
   auto *Icmp2 = IB->CreateICmpULT(Call, Phi2);
-  auto *And = IB->CreateAnd(Icmp1, Icmp1);
+  auto *And = IB->CreateAnd(Icmp1, Icmp2);
   auto *Select1 = IB->CreateSelect(And, Call, Phi2);
   auto *Select2 = IB->CreateSelect(And, Gep1, Phi1);
   auto *Add = IB->CreateAdd(Phi3, Const64i1);

@@ -12,7 +12,7 @@ namespace assembler {
 class Register {
   std::string Name;
 
-  constexpr std::vector<char> AllowedClasses{'x'};
+  std::vector<char> AllowedClasses{'x'};
 
 public:
   Register(const std::string &RegName) : Name{RegName} {
