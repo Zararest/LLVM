@@ -154,5 +154,17 @@ BB2:
   incJmp t0, 10, BB1, BB2 -> t0
 
 <app>
-  #дописать#
-  
+  createDots 10 -> t0
+  mv t0 -> a0
+  call initDots
+  li 0 -> t1
+  br BB2
+BB1:
+  ret
+BB2:
+  mv t0 -> a0
+  call changeState
+  mv t0 -> a0
+  call drawFrame
+  call simFlush
+  incJmp t1, 100, BB1, BB2 -> t1

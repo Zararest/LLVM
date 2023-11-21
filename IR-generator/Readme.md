@@ -88,11 +88,10 @@ make
   store i64 %7, i64* Seed, align 8, !tbaa !2
   ret i64 %7
 
-[spill]: (spill) (Reg)
-  adds register to the stack
-
-[restore]: (restore) (Reg)
-  restores register from spill by name
+[createDots] (Ptr) (...) (ImmSize)
+  %0 = alloca [ImmSize x %Dot], align 8
+  %1 = bitcast [ImmSize x %Dot]* %0 to i8*
+  Ptr = getelementptr inbounds [ImmSize x %Dot], [ImmSize x %Dot]* %0, i64 0, i64 0
 ```
 
 Обычные инструкции:
