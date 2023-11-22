@@ -18,7 +18,6 @@ struct Token {
     } 
 
     static bool isa(const std::string &Word) {
-      assert(Word.size() >= 2);
       return Word.front() == '.';
     }
 
@@ -35,8 +34,7 @@ struct Token {
       Name = std::string{std::next(Word.begin()), std::prev(Word.end())};
     }
 
-    static bool isa(const std::string &Word) {
-      assert(Word.size() >= 3);
+    static bool isa(const std::string &Word) {;
       return Word.front() == '<' && Word.back() == '>';
     }
 
@@ -54,7 +52,6 @@ struct Token {
     }
 
     static bool isa(const std::string &Word) {
-      assert(Word.size() >= 2);
       return Word.back() == ':';
     }
 
@@ -67,12 +64,11 @@ struct Token {
     Assign(const std::string &Word) {}
 
     static bool isa(const std::string &Word) {
-      assert(Word.size());
       return Word == "->";
     }
 
     void dump(std::ostream &S) {
-      S << " -> ";
+      S << " -> " << std::endl;
     }
   }; 
   
@@ -81,12 +77,11 @@ struct Token {
     std::string Name;
 
     static bool isa(const std::string &Word) {
-      assert(Word.size());
       return true;
     }
 
     void dump(std::ostream &S) {
-      S << Name << ' ';
+      S << Name << ' ' << std::endl;
     }
   }; 
 
@@ -95,11 +90,10 @@ struct Token {
 
 std::vector<Token> tokenize(std::string Program);
 
-
 template <typename It>
 void dumpTokens(It Beg, It End, std::ostream &S) {
   for (auto &Token : utils::makeRange(Beg, End))
-    Token.dump(S);
+    std::visit([&S](auto &&Arg) { Arg.dump(S); }, Token.Value);
   S << std::endl;
 }
 

@@ -9,8 +9,10 @@ void removeComments(std::string &Program) {
   constexpr auto CommentSubstitution = ' ';
   auto CommentBeg = std::find(Program.begin(), Program.end(), Comment);
   while (CommentBeg != Program.end()) {
-    auto CommentEnd = std::find(CommentBeg, Program.end(), Comment);
-    std::fill(CommentBeg, CommentEnd, CommentSubstitution);
+    auto CommentEnd = std::find(std::next(CommentBeg), Program.end(), Comment);
+    if (CommentEnd == Program.end())
+      utils::reportFatalError("Wrong comments format");
+    std::fill(CommentBeg, CommentEnd + 1, CommentSubstitution);
     CommentBeg = std::find(CommentEnd, Program.end(), Comment);
   }
 }
@@ -35,6 +37,7 @@ translator::Token getToken(std::string Word) {
   if (Res = tryTokenize<translator::Token::Word>(Word))
     return *Res;
   utils::reportFatalError("Unreachable");
+  return *Res;
 }
 
 } // namespace
@@ -50,13 +53,13 @@ std::vector<Token> tokenize(std::string Program) {
     return std::find(Delimiters.begin(), Delimiters.end(), C) == Delimiters.end(); 
   };
   auto WordBeg = std::find_if(Program.begin(), Program.end(), NotDelim);
-  auto WordEnd = std::find_if(WordBeg, Program.end(), NotDelim);
-
+  
   auto Res = std::vector<Token>{};
   while (WordBeg != Program.end()) {
-    Res.emplace_back(getToken({WordBeg, WordEnd}));
+    auto WordEnd = std::find_if_not(WordBeg, Program.end(), NotDelim);
+    if (WordBeg != WordEnd)
+      Res.emplace_back(getToken({WordBeg, WordEnd}));
     WordBeg = std::find_if(WordEnd, Program.end(), NotDelim);
-    WordEnd = std::find_if(WordBeg, Program.end(), NotDelim);
   }
 
   return Res;
