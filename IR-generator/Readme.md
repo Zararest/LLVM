@@ -65,18 +65,18 @@ r0 - возвращаемое значение
   Addr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff
   Val = load i64, i64* Addr, align 8
 
-[storeDotFiled]: (gep + store) (StructPtr) (ImmOff) (ValToStore)
+[storeDotField]: (gep + store) (StructPtr) (ImmOff) (ValToStore)
   Ptr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff
   store i64 ValToStore, i64* Ptr, align 8
 
-[storeDotFiledImm]: (gep + store) (StructPtr) (ImmOff) (ImmToStore)
+[storeDotFieldImm]: (gep + store) (StructPtr) (ImmOff) (ImmToStore)
   Ptr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff
   store i64 ImmToStore, i64* Ptr, align 8
 
 [jumpIfDot]: (gep + icmp + br) (StructPtr) (ImmOff) (ValCmpWith) (Label1) (Label2)
   Ptr = getelementptr inbounds %struct.Dot, %struct.Dot* StructPtr, i64 0, i32 ImmOff
   Field = load i64, i64* Ptr, align 8
-  Cond = icmp ugt i64 ValCmpWith, Filed
+  Cond = icmp ugt i64 ValCmpWith, Field
   br i1 Cond, label Label1, label Label2
 
 [getDotAddr]: (Addr) (gep) (StructPtr) (ValOff)
@@ -151,6 +151,9 @@ r0 - возвращаемое значение
 [cmpUGTImm]:(Val) (icmp) (ValIn) (Imm)
   Val = icmp ugt i64 ValIn, Imm
 
+[cmpUGT]:(Val) (icmp) (ValLhs) (ValRhs)
+  Val = icmp ugt i64 ValLhs, ValRhs
+
 [li]:(Val) (li) (Imm)
   Val = Imm
 
@@ -159,6 +162,9 @@ r0 - возвращаемое значение
 
 [add]:(Val) (add) (Lhs) (Rhs)
   Val = add Lhs, Rhs
+
+[sub]:(Val) (sub) (Lhs) (Rhs)
+  Val = sub Lhs, Rhs
 
 [select]: (Val) (select) (Cond) (ValIn1) (ValIn2)
   Val = select i1 Cond, i64 ValIn1, i64 ValIn2

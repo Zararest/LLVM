@@ -32,4 +32,6 @@ IteratorRange<It> makeRange(It Begin, It End) {
 void reportFatalError(const std::string &Msg);
 void reportWarning(const std::string &Msg);
 
+unsigned long long stoull(const std::string &Str);
+
 } // namespace utils

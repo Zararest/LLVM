@@ -13,9 +13,29 @@ static cl::opt<std::string> AsmFile("asm-file",
                                     cl::desc("File with my assembler"),
                                     cl::cat(Assembler), cl::init(""));
 
-static cl::opt<bool> DumpTokens("dump-tokens",
-                                cl::desc("Dumping tokens of the asm file"),
-                                cl::cat(Assembler), cl::init(false));
+static cl::opt<std::string> DumpTokens("dump-tokens",
+                                cl::desc("File to dump tokens of the asm file"),
+                                cl::cat(Assembler), cl::init(""));
+
+static cl::opt<std::string> DumpMyIR("dump-parsed",
+                              cl::desc("File to dump parsed program"),
+                              cl::cat(Assembler), cl::init(""));
+
+void dumpParsed(assembler::Code &Code) {
+  auto File = std::ofstream{DumpMyIR};
+  if (!File.is_open())
+    utils::reportFatalError("Can't open file to dump parsed");
+  
+  Code.dump(File);
+}
+
+template <typename It>
+void dumpTokens(It Beg, It End) {
+  auto File = std::ofstream{DumpTokens};
+  if (!File.is_open())
+    utils::reportFatalError("Can't open file to dump tokens");
+  translator::dumpTokens(Beg, End, File);
+}
 
 int main(int Argc, char **Argv) {
   cl::ParseCommandLineOptions(Argc, Argv);
@@ -34,6 +54,11 @@ int main(int Argc, char **Argv) {
   auto Tokens = translator::tokenize(Asm);
   std::cout << "Tokens number: " << Tokens.size() << std::endl;
   
-  if (DumpTokens)
-    translator::dumpTokens(Tokens.begin(), Tokens.end(), std::cout);
+  if (!DumpTokens.empty())
+    dumpTokens(Tokens.begin(), Tokens.end());
+  
+  auto Code = translator::parse(Tokens);
+  
+  if (!DumpMyIR.empty())
+    dumpParsed(Code);
 }

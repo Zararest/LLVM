@@ -61,6 +61,8 @@ struct Token {
   }; 
 
   struct Assign {
+    std::string Name;
+
     Assign(const std::string &Word) {}
 
     static bool isa(const std::string &Word) {
@@ -68,6 +70,7 @@ struct Token {
     }
 
     void dump(std::ostream &S) {
+      assert(Name.empty());
       S << " -> " << std::endl;
     }
   }; 
@@ -88,7 +91,7 @@ struct Token {
   std::string getName() {
     if (std::holds_alternative<Assign>(Value))
       utils::reportFatalError("Assign token doesn't have a name");
-    return std::visit([](auto &&Arg) { return Arg.Name; });
+    return std::visit([](auto &&Arg) { return Arg.Name; }, Value);
   }
 
   std::variant<Section, Function, Label, Assign, Word> Value;
@@ -104,6 +107,5 @@ void dumpTokens(It Beg, It End, std::ostream &S) {
 }
 
 assembler::Code parse(std::vector<Token> Program);
-void dump(assembler::Code &Code, std::ostream &S);
 
 } // namespace translator

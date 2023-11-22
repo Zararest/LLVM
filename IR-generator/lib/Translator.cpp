@@ -10,7 +10,9 @@
     if (Name != name)                                        \
       return false;                                          \
     auto Instr = Instruction{}.addOpcode(Name);              \
-    GlobalIt++;     
+    GlobalIt++;                                              \
+    DEBUG_EXPR(std::cout << "parsed {" << name << "}"        \
+               << std::endl);
 
 namespace translator {
 
@@ -73,7 +75,7 @@ class Parser {
       return false;
 
     GlobalIt++;
-    auto Val = std::stoull(GlobalIt->getName());
+    auto Val = utils::stoull(GlobalIt->getName());
     checkIterator();
     GlobalIt++;
     DEBUG_EXPR(std::cout << "parsed constant" + GlobalIt->getName() << std::endl);
@@ -93,7 +95,7 @@ class Parser {
 
     GlobalIt++;
     Cfg.addStart(GlobalIt->getName());
-    DEBUG_EXPR(std::cout << "parsed start" + GlobalIt->getName() << std::endl);
+    DEBUG_EXPR(std::cout << "parsed start " + GlobalIt->getName() << std::endl);
     checkIterator();
     GlobalIt++;
     return true;
@@ -101,10 +103,13 @@ class Parser {
 
   bool parseGlobals(Code &Code) {
     if (!std::holds_alternative<Token::Section>(GlobalIt->Value))
-      utils::reportFatalError("Can't parse globals section");
+      utils::reportFatalError("Can't parse globals section: " + 
+                              GlobalIt->getName());
     if (GlobalIt->getName() != "global")
       return false;
-
+    
+    GlobalIt++;
+    auto HadProgress = false;
     auto Parsed = false;
     auto Cfg = GlobalConfig{};
 
@@ -112,16 +117,17 @@ class Parser {
       Parsed = false;
       Parsed |= parseConstant(Cfg);
       Parsed |= parseStart(Cfg);
+      HadProgress |= Parsed;
     } while (Parsed);
 
     Code.addGlobalConf(std::move(Cfg));
     DEBUG_EXPR(std::cout << "parsed globals" << std::endl);
-    return true;
+    return HadProgress;
   }
 
   void parseImm(Instruction &I) {
     checkIterator();
-    I.addArgument(std::stoull(GlobalIt->getName()));
+    I.addArgument(utils::stoull(GlobalIt->getName()));
     GlobalIt++;
   }
 
@@ -134,7 +140,7 @@ class Parser {
   void parseRetVal(Instruction &I) {
     checkIterator();
     if (!std::holds_alternative<Token::Assign>(GlobalIt->Value))
-      utils::reportFatalError("Wrong and format");
+      utils::reportFatalError("Wrong ret format");
     GlobalIt++;
     checkIterator();
     I.addReturnValue(Register{GlobalIt->getName()});
@@ -196,9 +202,18 @@ class Parser {
     return true;
   }
 
+  bool parseCmpUGT(BasicBlock &BB) {
+    MAKE_INSTR("cmpUGT");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
   bool parseLi(BasicBlock &BB) {
     MAKE_INSTR("li");
     parseImm(Instr);
+    parseRetVal(Instr);
     return true;
   }
 
@@ -212,6 +227,14 @@ class Parser {
 
   bool parseAdd(BasicBlock &BB) {
     MAKE_INSTR("add");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseSub(BasicBlock &BB) {
+    MAKE_INSTR("sub");
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
@@ -244,9 +267,11 @@ class Parser {
     Parsed |= parseBr(BB);
     Parsed |= parseCall(BB);
     Parsed |= parseCmpUGTImm(BB);
+    Parsed |= parseCmpUGT(BB);
     Parsed |= parseLi(BB);
     Parsed |= parseMul(BB);
     Parsed |= parseAdd(BB);
+    Parsed |= parseSub(BB);
     Parsed |= parseSelect(BB);
     Parsed |= parseMv(BB);
 
@@ -263,24 +288,24 @@ class Parser {
     return true;
   } 
 
-  bool parseLoadDotFiled(BasicBlock &BB) {
-    MAKE_INSTR("loadDotFiled");
+  bool parseLoadDotField(BasicBlock &BB) {
+    MAKE_INSTR("loadDotField");
     parseReg(Instr);
     parseImm(Instr);
     parseRetVal(Instr);
     return true;
   }
 
-  bool parseStoreDotFiled(BasicBlock &BB) {
-    MAKE_INSTR("storeDotFiled");
+  bool parseStoreDotField(BasicBlock &BB) {
+    MAKE_INSTR("storeDotField");
     parseReg(Instr);
     parseImm(Instr);
     parseReg(Instr);
     return true;
   }
 
-  bool parseStoreDotFiledImm(BasicBlock &BB) {
-    MAKE_INSTR("storeDotFiledImm");
+  bool parseStoreDotFieldImm(BasicBlock &BB) {
+    MAKE_INSTR("storeDotFieldImm");
     parseReg(Instr);
     parseImm(Instr);
     parseImm(Instr);
@@ -353,17 +378,18 @@ class Parser {
   bool parseSpecialInstruction(BasicBlock &BB) {
     auto Parsed = false;
 
-    Parsed != parseIncJump(BB);
-    Parsed != parseLoadDotFiled(BB);
-    Parsed != parseStoreDotFiled(BB);
-    Parsed != parseStoreDotFiledImm(BB);
-    Parsed != parseGetDotAddr(BB);
-    Parsed != parseInitRgb(BB);
-    Parsed != parseLoadRgb(BB);
-    Parsed != parseCmpTwo(BB);
-    Parsed != parseNorm(BB);
-    Parsed != parseXorshift(BB);
-    Parsed != parseCreateDots(BB);
+    Parsed |= parseIncJump(BB);
+    Parsed |= parseLoadDotField(BB);
+    Parsed |= parseStoreDotField(BB);
+    Parsed |= parseStoreDotFieldImm(BB);
+    Parsed |= parseJumpIfDot(BB);
+    Parsed |= parseGetDotAddr(BB);
+    Parsed |= parseInitRgb(BB);
+    Parsed |= parseLoadRgb(BB);
+    Parsed |= parseCmpTwo(BB);
+    Parsed |= parseNorm(BB);
+    Parsed |= parseXorshift(BB);
+    Parsed |= parseCreateDots(BB);
 
     return Parsed;
   }
@@ -372,6 +398,7 @@ class Parser {
     if (!std::holds_alternative<Token::Label>(GlobalIt->Value))
       return false;
 
+    auto HadProgress = false;
     auto Parsed = false;
     auto BB = BasicBlock{}.addLabel(GlobalIt->getName());
     checkIterator();
@@ -381,24 +408,29 @@ class Parser {
       Parsed = false;
       Parsed |= parseNormalInstruction(BB);
       Parsed |= parseSpecialInstruction(BB);
+      HadProgress |= Parsed;
     } while (Parsed);
-
-    return true;
+    return HadProgress;
   }
 
   bool parseFunction(Code &Code) {
     if (!std::holds_alternative<Token::Function>(GlobalIt->Value))
       return false;
     
-    auto Func = Function{}.addName(GlobalIt->getName());
+    auto Name = GlobalIt->getName();
+    auto Func = Function{}.addName(Name);
+    GlobalIt++;
+    auto HadProgress = false;
     auto Parsed = false;
 
     do {
       Parsed = false;
       Parsed |= parseBasicBlock(Func);
+      HadProgress |= Parsed;
     } while (Parsed);
-
-    return true;
+    DEBUG_EXPR(std::cout << "parsed function: " << Name 
+              << "\n" << std::endl);
+    return HadProgress;
   }
 
   bool parseText(Code &Code) {
@@ -407,14 +439,17 @@ class Parser {
     if (GlobalIt->getName() != "text")
       return false;
     
+    GlobalIt++;
+    auto HadProgress = false;
     auto Parsed = false;
 
     do {
       Parsed = false;
       Parsed |= parseFunction(Code);
+      HadProgress |= Parsed;
     } while (Parsed);
-
-    return true;
+    DEBUG_EXPR(std::cout << "parsed text\n" << std::endl);
+    return HadProgress;
   }
 
   void parseSections(Code &Code) {
@@ -424,7 +459,7 @@ class Parser {
       Parsed = false;
       Parsed |= parseGlobals(Code);
       Parsed |= parseText(Code);
-      DEBUG_EXPR(std::cout << "\nparsed section\n" << std::endl);
+      DEBUG_EXPR(std::cout << "parsed section\n" << std::endl);
     } while (GlobalIt != End && Parsed);
   }
 
@@ -434,6 +469,8 @@ public:
     End = Program.end();
     Code Code;
     parseSections(Code);
+    if (GlobalIt != End)
+      utils::reportFatalError("Parsing stoped on " + GlobalIt->getName());
     return Code;
   }
 };  

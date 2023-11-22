@@ -7,6 +7,7 @@
 #include <variant>
 #include <algorithm>
 #include <array>
+#include <iostream>
 
 namespace assembler {
 
@@ -40,7 +41,10 @@ public:
   Register addNumber(uint64_t Regnum) {
     Number = Regnum;
     return *this;
+  }
 
+  void dump(std::ostream &S) {
+    S << Class << Number;
   }
 };
 
@@ -52,6 +56,21 @@ class Instruction {
   std::string Opcode;
   std::optional<Register> ReturnValue;
   std::vector<Argument> Args;
+
+  void dumpArg(Argument &Arg, std::ostream &S) {
+    if (std::holds_alternative<Register>(Arg)) {
+      std::get<Register>(Arg).dump(S);
+      return;
+    }
+    if (std::holds_alternative<Immidiate>(Arg)) {
+      S << std::get<Immidiate>(Arg);
+      return;
+    }
+    if (std::holds_alternative<Label>(Arg)) {
+      S << std::get<Label>(Arg);
+      return;
+    }
+  }
 
 public:
   Instruction() = default;
@@ -69,6 +88,19 @@ public:
   Instruction addArgument(Argument Arg) {
     Args.emplace_back(std::move(Arg));
     return *this;
+  }
+
+  void dump(std::ostream &S) {
+    S << Opcode << " ";
+    for (auto &Arg : Args) {
+      dumpArg(Arg, S);
+      S << ", ";
+    }
+    if (ReturnValue) {
+      S << "-> ";
+      ReturnValue->dump(S);
+    }
+    S << std::endl;
   }
 };
 
@@ -89,6 +121,14 @@ public:
     Instructions.emplace_back(std::move(Instr));
     return *this;
   }
+
+  void dump(std::ostream &S) {
+    S << BBLabel << ":" << std::endl;
+    for (auto &I : Instructions) {
+      S << "\t";
+      I.dump(S);
+    }
+  }
 };  
 
 class Function {
@@ -107,6 +147,12 @@ public:
     Blocks.emplace_back(std::move(Block));
     return *this;
   }
+
+  void dump(std::ostream &S) {
+    S << "<" << Name << ">" << std::endl;
+    for (auto &BB : Blocks)
+      BB.dump(S);
+  }
 };
 
 class Global {
@@ -124,6 +170,10 @@ public:
   Global addInitVal(uint64_t InitValIn) {
     InitVal = InitValIn;
     return *this;
+  }
+
+  void dump(std::ostream &S) {
+    S << Name << InitVal << std::endl;
   }
 };
 
@@ -147,6 +197,12 @@ public:
   bool hasStart() {
     return !Start.empty();
   }
+
+  void dump(std::ostream &S) {
+    S << "start " << Start << "\n" << std::endl;
+    for (auto &G : Globals)
+      G.dump(S);
+  }
 };
 
 class Code {
@@ -164,6 +220,15 @@ public:
   Code addFunction(Function Func) {
     Functions.emplace_back(std::move(Func));
     return *this;
+  }
+
+  void dump(std::ostream &S) {
+    Global.dump(S);
+    S << std::endl;
+    for (auto &F : Functions) {
+      F.dump(S);
+      S << std::endl;
+    }
   }
 };
 
