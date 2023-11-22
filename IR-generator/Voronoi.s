@@ -1,5 +1,7 @@
 .global
   Seed 1
+  
+  start app
 
 .text
 #a0 - dot struct# 

@@ -9,4 +9,8 @@ void reportFatalError(const std::string &Msg) {
   exit(-1);
 }
 
+void reportWarning(const std::string &Msg) {
+  std::cerr << "Warning: " << Msg << std::endl;
+}
+
 } // namespace utils

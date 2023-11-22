@@ -6,61 +6,160 @@
 #include <string>
 #include <variant>
 #include <algorithm>
+#include <array>
 
 namespace assembler {
 
 class Register {
-  std::string Name;
+  char Class;
+  uint64_t Number;
 
-  std::vector<char> AllowedClasses{'x'};
+  static constexpr std::array AllowedClasses{'a', 't', 'r'};
 
 public:
-  Register(const std::string &RegName) : Name{RegName} {
-    if (RegName.empty())
+  Register() = default;
+
+  Register(const std::string &Reg) {
+    if (Reg.empty())
       utils::reportFatalError("Empty reg name");
-    auto RegClass = RegName.front();
-    auto RegClassIt = 
-      std::find(AllowedClasses.begin(), AllowedClasses.end(), RegClass);
-    if (RegClassIt == AllowedClasses.end())
+    Class = Reg.front();
+    if (std::find(AllowedClasses.begin(), AllowedClasses.end(), Class) 
+        == AllowedClasses.end())
       utils::reportFatalError("Unknown register class");
+    auto NumStr = std::string{std::next(Reg.begin()), Reg.end()};
+    Number = std::atol(NumStr.c_str());
+    if (Number == 0 && NumStr != "0")
+      utils::reportFatalError("Invalid register name: " + Reg);
+  }
+
+  Register addClass(char ClassIn) {
+    Class = ClassIn;
+    return *this;
+  }
+
+  Register addNumber(uint64_t Regnum) {
+    Number = Regnum;
+    return *this;
+
   }
 };
 
 using Label = std::string;
-using Immidiate = size_t;
-
+using Immidiate = uint64_t;
 using Argument = std::variant<Register, Immidiate, Label>;
 
 class Instruction {
-  std::string Name;
+  std::string Opcode;
+  std::optional<Register> ReturnValue;
   std::vector<Argument> Args;
 
-  template <typename It>
-  Instruction(const std::string &Name, It ArgsBeg, It ArgsEnd) : Name{Name},
-                                                                 Args{ArgsBeg, ArgsEnd} {}
-
 public:
-  static Instruction createInstruction(const std::string &Name, 
-                                       const std::string &Arg1, 
-                                       const std::string &Arg2);
+  Instruction() = default;
+
+  Instruction addOpcode(std::string OpcodeIn) {
+    Opcode = Opcode;
+    return *this;
+  }
+
+  Instruction addReturnValue(Register Reg) {
+    ReturnValue = std::move(Reg);
+    return *this;
+  }
+
+  Instruction addArgument(Argument Arg) {
+    Args.emplace_back(std::move(Arg));
+    return *this;
+  }
 };
 
+
 class BasicBlock {
-  std::string Label;
+  Label BBLabel;
   std::vector<Instruction> Instructions;
 
 public:
-  template <typename It>
-  BasicBlock(const std::string &Label, It IBeg, It IEnd) : Label{Label}, 
-                                                           Instructions{IBeg, IEnd} {}
+  BasicBlock() = default;
+
+  BasicBlock addLabel(Label LabelIn) {
+    BBLabel = LabelIn;
+    return *this;
+  }
+
+  BasicBlock addInstruction(Instruction Instr) {
+    Instructions.emplace_back(std::move(Instr));
+    return *this;
+  }
 };  
 
-class Code {
-  std::string StartLabel;
+class Function {
+  std::string Name;
   std::vector<BasicBlock> Blocks; 
 
 public:
-  
+  Function() = default;
+
+  Function addName(std::string NameIn) {
+    Name = std::move(NameIn);
+    return *this;
+  }
+
+  Function addBlock(BasicBlock Block)  {
+    Blocks.emplace_back(std::move(Block));
+    return *this;
+  }
+};
+
+class Global {
+  std::string Name;
+  uint64_t InitVal;
+
+public: 
+  Global() = default;
+
+  Global addName(std::string NameIn) {
+    Name = std::move(NameIn);
+    return *this;
+  }
+
+  Global addInitVal(uint64_t InitValIn) {
+    InitVal = InitValIn;
+    return *this;
+  }
+};
+
+class GlobalConfig {
+  std::string Start;
+  std::vector<Global> Globals;
+
+public:
+  GlobalConfig() = default;
+
+  GlobalConfig addStart(std::string Start) {
+    Start = std::move(Start);
+    return *this;
+  }
+
+  GlobalConfig addGlobal(Global Glob) {
+    Globals.emplace_back(std::move(Glob));
+  }
+};
+
+class Code {
+  GlobalConfig Global;
+  std::vector<Function> Functions; 
+
+public:
+  Code() = default; 
+
+  Code addGlobalConf(GlobalConfig Cfg) {
+    Global = std::move(Cfg);
+    return *this;
+  }
+
+  Code addFunction(Function Func) {
+    Functions.emplace_back(std::move(Func));
+    return *this;
+  }
 };
 
 } // namespace assembler
