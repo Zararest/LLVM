@@ -143,6 +143,10 @@ public:
     Globals.emplace_back(std::move(Glob));
     return *this;
   }
+
+  bool hasStart() {
+    return !Start.empty();
+  }
 };
 
 class Code {

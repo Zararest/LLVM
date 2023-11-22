@@ -85,6 +85,12 @@ struct Token {
     }
   }; 
 
+  std::string getName() {
+    if (std::holds_alternative<Assign>(Value))
+      utils::reportFatalError("Assign token doesn't have a name");
+    return std::visit([](auto &&Arg) { return Arg.Name; });
+  }
+
   std::variant<Section, Function, Label, Assign, Word> Value;
 };
 

@@ -33,7 +33,7 @@ BB2: #pred: entry#
   br BB6
 BB3: #pred: entry, BB1#
   #геп перенесен к стору#
-  cmpUGT t2, 64 -> t3
+  cmpUGTImm t2, 64 -> t3
   brCond t3, BB4, BB5
 BB4: #pred: BB3#
   storeDotFiledImm a0, 3, -1 -> t4
@@ -65,11 +65,11 @@ BB2:
 
 
 <distance>
-  cmpUGT a2, a0 -> t0
+  cmpUGTImm a2, a0 -> t0
   sub a2, a0 -> t1
   sub a0, a2 -> t2
   select t0, t1, t2 -> t3
-  cmpUGT a3, a1 -> t4
+  cmpUGTImm a3, a1 -> t4
   sub a3, a1 -> t5
   sub a1, a3 -> t6
   select t4, t5, t6 -> t7

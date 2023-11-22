@@ -2,6 +2,14 @@
 
 #include <string>
 
+#define DEBUG
+
+#ifdef DEBUG
+#define DEBUG_EXPR(expr) (expr)
+#else
+#define DEBUG_EXPR(expr)
+#endif
+
 namespace utils {
 
 template <typename It>

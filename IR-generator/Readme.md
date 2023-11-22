@@ -54,6 +54,8 @@ r0 - возвращаемое значение
 ```
 Общая нотация: 
 [название]:(Возвращаемое значение если есть) (значение инструкции) (аргументы)+
+
+
 [incJump]: (Val) (add + icmp + br) (RegToInc) (ImmToCmp) (Label1) (Label2)
   Val = add i64 RegToInc, 1
   Cond = icmp eq i64 Val, ImmToCmp
@@ -146,7 +148,7 @@ r0 - возвращаемое значение
 [call]:(call) (FuncName)
   call FuncName(...) #аргументы будут переданы через регистры#
 
-[cmpUGT]:(Val) (icmp) (ValIn) (Imm)
+[cmpUGTImm]:(Val) (icmp) (ValIn) (Imm)
   Val = icmp ugt i64 ValIn, Imm
 
 [li]:(Val) (li) (Imm)

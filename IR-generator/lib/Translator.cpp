@@ -1,6 +1,18 @@
 #include "../include/Translator.h"
+#include "../include/Assembler.h"
 
 #include <algorithm>
+
+#define MAKE_INSTR(name)                                     \
+  if (!std::holds_alternative<Token::Word>(GlobalIt->Value)) \
+      return false;                                          \
+    auto Name = GlobalIt->getName();                         \
+    if (Name != name)                                        \
+      return false;                                          \
+    auto Instr = Instruction{}.addOpcode(Name);              \
+    GlobalIt++;     
+
+namespace translator {
 
 namespace {
 
@@ -18,31 +30,415 @@ void removeComments(std::string &Program) {
 }
 
 template <typename T>
-std::optional<translator::Token> tryTokenize(const std::string &Word) {
+std::optional<Token> tryTokenize(const std::string &Word) {
   if (T::isa(Word))
-    return translator::Token{T{Word}};
+    return Token{T{Word}};
   return std::nullopt;
 }
 
-translator::Token getToken(std::string Word) {
-  auto Res = std::optional<translator::Token>{};
-  if (Res = tryTokenize<translator::Token::Section>(Word))
+Token getToken(std::string Word) {
+  auto Res = std::optional<Token>{};
+  if (Res = tryTokenize<Token::Section>(Word))
     return *Res;
-  if (Res = tryTokenize<translator::Token::Function>(Word))
+  if (Res = tryTokenize<Token::Function>(Word))
     return *Res;
-  if (Res = tryTokenize<translator::Token::Label>(Word))
+  if (Res = tryTokenize<Token::Label>(Word))
     return *Res;
-  if (Res = tryTokenize<translator::Token::Assign>(Word))
+  if (Res = tryTokenize<Token::Assign>(Word))
     return *Res;
-  if (Res = tryTokenize<translator::Token::Word>(Word))
+  if (Res = tryTokenize<Token::Word>(Word))
     return *Res;
   utils::reportFatalError("Unreachable");
   return *Res;
 }
 
-} // namespace
+using namespace assembler;
 
-namespace translator {
+using TokenIt = std::vector<Token>::iterator;
+
+class Parser {
+  TokenIt GlobalIt;
+  TokenIt End;
+
+  void checkIterator() {
+    if (GlobalIt == End)
+      utils::reportFatalError("Incomplete lexem");
+  }
+
+  bool parseConstant(GlobalConfig &Cfg) {
+    if (!std::holds_alternative<Token::Word>(GlobalIt->Value))
+      return false;
+    auto Name = GlobalIt->getName();
+    if (Name == "start") 
+      return false;
+
+    GlobalIt++;
+    auto Val = std::stoull(GlobalIt->getName());
+    checkIterator();
+    GlobalIt++;
+    DEBUG_EXPR(std::cout << "parsed constant" + GlobalIt->getName() << std::endl);
+    Cfg.addGlobal(Global{}.addName(Name).addInitVal(Val));
+    return true;
+  }
+
+  bool parseStart(GlobalConfig &Cfg) {
+    if (!std::holds_alternative<Token::Word>(GlobalIt->Value))
+      return false;
+    auto Name = GlobalIt->getName();
+    if (Name != "start") 
+      return false;
+
+    if (Cfg.hasStart())
+      utils::reportFatalError("Start function multi definition");
+
+    GlobalIt++;
+    Cfg.addStart(GlobalIt->getName());
+    DEBUG_EXPR(std::cout << "parsed start" + GlobalIt->getName() << std::endl);
+    checkIterator();
+    GlobalIt++;
+    return true;
+  }
+
+  bool parseGlobals(Code &Code) {
+    if (!std::holds_alternative<Token::Section>(GlobalIt->Value))
+      utils::reportFatalError("Can't parse globals section");
+    if (GlobalIt->getName() != "global")
+      return false;
+
+    auto Parsed = false;
+    auto Cfg = GlobalConfig{};
+
+    do {
+      Parsed = false;
+      Parsed |= parseConstant(Cfg);
+      Parsed |= parseStart(Cfg);
+    } while (Parsed);
+
+    Code.addGlobalConf(std::move(Cfg));
+    DEBUG_EXPR(std::cout << "parsed globals" << std::endl);
+    return true;
+  }
+
+  void parseImm(Instruction &I) {
+    checkIterator();
+    I.addArgument(std::stoull(GlobalIt->getName()));
+    GlobalIt++;
+  }
+
+  void parseReg(Instruction &I) {
+    checkIterator();
+    I.addArgument(Register{GlobalIt->getName()});
+    GlobalIt++;
+  }
+
+  void parseRetVal(Instruction &I) {
+    checkIterator();
+    if (!std::holds_alternative<Token::Assign>(GlobalIt->Value))
+      utils::reportFatalError("Wrong and format");
+    GlobalIt++;
+    checkIterator();
+    I.addReturnValue(Register{GlobalIt->getName()});
+    GlobalIt++;
+  }
+
+  void parseLabel(Instruction &I) {
+    checkIterator();
+    I.addArgument(Label{GlobalIt->getName()});
+    GlobalIt++;
+  }
+
+  bool parseAnd(BasicBlock &BB) {
+    MAKE_INSTR("and");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseRet(BasicBlock &BB) {
+    MAKE_INSTR("ret");
+    return true;
+  }
+
+  bool parseCmpEqImm(BasicBlock &BB) {
+    MAKE_INSTR("cmpEqImm");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseBrCond(BasicBlock &BB) {
+    MAKE_INSTR("brCond");
+    parseReg(Instr);
+    parseLabel(Instr);
+    parseLabel(Instr);
+    return true;
+  }
+
+  bool parseBr(BasicBlock &BB) {
+    MAKE_INSTR("br");
+    parseLabel(Instr);
+    return true;
+  }
+
+  bool parseCall(BasicBlock &BB) {
+    MAKE_INSTR("call");
+    parseLabel(Instr);
+    return true;
+  }
+
+  bool parseCmpUGTImm(BasicBlock &BB) {
+    MAKE_INSTR("cmpUGTImm");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseLi(BasicBlock &BB) {
+    MAKE_INSTR("li");
+    parseImm(Instr);
+    return true;
+  }
+
+  bool parseMul(BasicBlock &BB) {
+    MAKE_INSTR("mul");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseAdd(BasicBlock &BB) {
+    MAKE_INSTR("add");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseSelect(BasicBlock &BB) {
+    MAKE_INSTR("select");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseMv(BasicBlock &BB) {
+    MAKE_INSTR("mv");
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseNormalInstruction(BasicBlock &BB) {
+    auto Parsed = false;
+
+    Parsed |= parseAnd(BB);
+    Parsed |= parseRet(BB);
+    Parsed |= parseCmpEqImm(BB);
+    Parsed |= parseBrCond(BB);
+    Parsed |= parseBr(BB);
+    Parsed |= parseCall(BB);
+    Parsed |= parseCmpUGTImm(BB);
+    Parsed |= parseLi(BB);
+    Parsed |= parseMul(BB);
+    Parsed |= parseAdd(BB);
+    Parsed |= parseSelect(BB);
+    Parsed |= parseMv(BB);
+
+    return Parsed;
+  }
+
+  bool parseIncJump(BasicBlock &BB) {
+    MAKE_INSTR("incJump");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseLabel(Instr);
+    parseLabel(Instr);
+    parseRetVal(Instr);
+    return true;
+  } 
+
+  bool parseLoadDotFiled(BasicBlock &BB) {
+    MAKE_INSTR("loadDotFiled");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseStoreDotFiled(BasicBlock &BB) {
+    MAKE_INSTR("storeDotFiled");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseReg(Instr);
+    return true;
+  }
+
+  bool parseStoreDotFiledImm(BasicBlock &BB) {
+    MAKE_INSTR("storeDotFiledImm");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseImm(Instr);
+    return true;
+  }
+
+  bool parseJumpIfDot(BasicBlock &BB) {
+    MAKE_INSTR("jumpIfDot");
+    parseReg(Instr);
+    parseImm(Instr);
+    parseReg(Instr);
+    parseLabel(Instr);
+    parseLabel(Instr);
+    return true;
+  }
+
+  bool parseGetDotAddr(BasicBlock &BB) {
+    MAKE_INSTR("getDotAddr");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseInitRgb(BasicBlock &BB) {
+    MAKE_INSTR("initRgb");
+    parseReg(Instr);
+    parseLabel(Instr);
+    return true;
+  }
+
+  bool parseLoadRgb(BasicBlock &BB) {
+    MAKE_INSTR("loadRgb");
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseCmpTwo(BasicBlock &BB) {
+    MAKE_INSTR("cmpTwo");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseNorm(BasicBlock &BB) {
+    MAKE_INSTR("norm");
+    parseReg(Instr);
+    parseReg(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseXorshift(BasicBlock &BB) {
+    MAKE_INSTR("xorshift");
+    parseLabel(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseCreateDots(BasicBlock &BB) {
+    MAKE_INSTR("createDots");
+    parseImm(Instr);
+    parseRetVal(Instr);
+    return true;
+  }
+
+  bool parseSpecialInstruction(BasicBlock &BB) {
+    auto Parsed = false;
+
+    Parsed != parseIncJump(BB);
+    Parsed != parseLoadDotFiled(BB);
+    Parsed != parseStoreDotFiled(BB);
+    Parsed != parseStoreDotFiledImm(BB);
+    Parsed != parseGetDotAddr(BB);
+    Parsed != parseInitRgb(BB);
+    Parsed != parseLoadRgb(BB);
+    Parsed != parseCmpTwo(BB);
+    Parsed != parseNorm(BB);
+    Parsed != parseXorshift(BB);
+    Parsed != parseCreateDots(BB);
+
+    return Parsed;
+  }
+
+  bool parseBasicBlock(Function &Func) {
+    if (!std::holds_alternative<Token::Label>(GlobalIt->Value))
+      return false;
+
+    auto Parsed = false;
+    auto BB = BasicBlock{}.addLabel(GlobalIt->getName());
+    checkIterator();
+    GlobalIt++;
+
+    do {
+      Parsed = false;
+      Parsed |= parseNormalInstruction(BB);
+      Parsed |= parseSpecialInstruction(BB);
+    } while (Parsed);
+
+    return true;
+  }
+
+  bool parseFunction(Code &Code) {
+    if (!std::holds_alternative<Token::Function>(GlobalIt->Value))
+      return false;
+    
+    auto Func = Function{}.addName(GlobalIt->getName());
+    auto Parsed = false;
+
+    do {
+      Parsed = false;
+      Parsed |= parseBasicBlock(Func);
+    } while (Parsed);
+
+    return true;
+  }
+
+  bool parseText(Code &Code) {
+    if (!std::holds_alternative<Token::Section>(GlobalIt->Value))
+      utils::reportFatalError("Can't parse text section");
+    if (GlobalIt->getName() != "text")
+      return false;
+    
+    auto Parsed = false;
+
+    do {
+      Parsed = false;
+      Parsed |= parseFunction(Code);
+    } while (Parsed);
+
+    return true;
+  }
+
+  void parseSections(Code &Code) {
+    auto Parsed = false;
+
+    do {
+      Parsed = false;
+      Parsed |= parseGlobals(Code);
+      Parsed |= parseText(Code);
+      DEBUG_EXPR(std::cout << "\nparsed section\n" << std::endl);
+    } while (GlobalIt != End && Parsed);
+  }
+
+public:
+  Code parse(std::vector<Token> &Program) {
+    GlobalIt = Program.begin();
+    End = Program.end();
+    Code Code;
+    parseSections(Code);
+    return Code;
+  }
+};  
+
+} // namespace
 
 std::vector<Token> tokenize(std::string Program) {
   removeComments(Program);
@@ -63,6 +459,10 @@ std::vector<Token> tokenize(std::string Program) {
   }
 
   return Res;
+}
+
+Code parse(std::vector<Token> Program) {
+  return Parser{}.parse(Program);
 }
 
 } // namespace translator
