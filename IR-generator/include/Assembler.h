@@ -141,6 +141,7 @@ public:
 
   GlobalConfig addGlobal(Global Glob) {
     Globals.emplace_back(std::move(Glob));
+    return *this;
   }
 };
 

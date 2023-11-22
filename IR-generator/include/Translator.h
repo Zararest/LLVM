@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "Assembler.h"
+#include "Utils.h"
 
 namespace translator {
 
@@ -93,6 +94,14 @@ struct Token {
 };
 
 std::vector<Token> tokenize(std::string Program);
+
+
+template <typename It>
+void dumpTokens(It Beg, It End, std::ostream &S) {
+  for (auto &Token : utils::makeRange(Beg, End))
+    Token.dump(S);
+  S << std::endl;
+}
 
 assembler::Code parse(std::vector<Token> Program);
 void dump(assembler::Code &Code, std::ostream &S);

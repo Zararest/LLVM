@@ -56,7 +56,7 @@ std::vector<Token> tokenize(std::string Program) {
   while (WordBeg != Program.end()) {
     Res.emplace_back(getToken({WordBeg, WordEnd}));
     WordBeg = std::find_if(WordEnd, Program.end(), NotDelim);
-    WordEnd = std::find(WordBeg, Program.end(), NotDelim);
+    WordEnd = std::find_if(WordBeg, Program.end(), NotDelim);
   }
 
   return Res;

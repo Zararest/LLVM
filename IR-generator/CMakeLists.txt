@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
-project(IR-gen)
+project(Assembler)
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CPP_COMPILER clang++)
@@ -14,3 +14,10 @@ target_include_directories(Voronoi-IR PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_definitions(Voronoi-IR PUBLIC ${LLVM_DEFINITIONS})
 target_link_libraries(Voronoi-IR LLVM-12)
 target_link_libraries(Voronoi-IR ${SDL2_LIBRARIES})
+
+add_executable(${PROJECT_NAME} main.cpp lib/Assembler.cpp lib/Translator.cpp lib/Utils.cpp)
+target_include_directories(${PROJECT_NAME} PUBLIC ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(${PROJECT_NAME} PUBLIC ${LLVM_DEFINITIONS})
+target_link_libraries(${PROJECT_NAME} LLVM-12)
+llvm_map_components_to_libnames(llvm_libs support core irreader)
+target_link_libraries(${PROJECT_NAME} ${llvm_libs})
