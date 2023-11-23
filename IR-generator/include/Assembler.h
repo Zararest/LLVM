@@ -13,7 +13,7 @@ namespace assembler {
 
 class Register {
   char Class;
-  uint64_t Number;
+  int64_t Number;
 
   static constexpr std::array AllowedClasses{'a', 't', 'r'};
 
@@ -38,10 +38,13 @@ public:
     return *this;
   }
 
-  Register addNumber(uint64_t Regnum) {
+  Register addNumber(int64_t Regnum) {
     Number = Regnum;
     return *this;
   }
+
+  auto getClass() { return Class; }
+  auto getNumber() { return Number; }
 
   void dump(std::ostream &S) {
     S << Class << Number;
@@ -49,7 +52,7 @@ public:
 };
 
 using Label = std::string;
-using Immidiate = uint64_t;
+using Immidiate = int64_t;
 using Argument = std::variant<Register, Immidiate, Label>;
 
 class Instruction {
@@ -76,7 +79,7 @@ public:
   Instruction() = default;
 
   Instruction addOpcode(std::string OpcodeIn) {
-    Opcode = Opcode;
+    Opcode = OpcodeIn;
     return *this;
   }
 
@@ -89,6 +92,10 @@ public:
     Args.emplace_back(std::move(Arg));
     return *this;
   }
+
+  auto getOpcode() { return Opcode; }
+  auto getReturnValue() { return ReturnValue; }
+  auto getArgs() { return utils::makeRange(Args.begin(), Args.end()); }
 
   void dump(std::ostream &S) {
     S << Opcode << " ";
@@ -122,6 +129,11 @@ public:
     return *this;
   }
 
+  auto getLabel() { return BBLabel; }
+  auto getInstructions() { 
+    return utils::makeRange(Instructions.begin(), Instructions.end()); 
+  }
+
   void dump(std::ostream &S) {
     S << BBLabel << ":" << std::endl;
     for (auto &I : Instructions) {
@@ -148,6 +160,9 @@ public:
     return *this;
   }
 
+  auto getName() { return Name; }
+  auto getBlocks() { return utils::makeRange(Blocks.begin(), Blocks.end()); }
+
   void dump(std::ostream &S) {
     S << "<" << Name << ">" << std::endl;
     for (auto &BB : Blocks)
@@ -157,7 +172,7 @@ public:
 
 class Global {
   std::string Name;
-  uint64_t InitVal;
+  int64_t InitVal;
 
 public: 
   Global() = default;
@@ -167,13 +182,16 @@ public:
     return *this;
   }
 
-  Global addInitVal(uint64_t InitValIn) {
+  Global addInitVal(int64_t InitValIn) {
     InitVal = InitValIn;
     return *this;
   }
 
+  auto getName() { return Name; }
+  auto getInitVal() { return InitVal; }
+
   void dump(std::ostream &S) {
-    S << Name << InitVal << std::endl;
+    S << Name << " " << InitVal << std::endl;
   }
 };
 
@@ -184,8 +202,8 @@ class GlobalConfig {
 public:
   GlobalConfig() = default;
 
-  GlobalConfig addStart(std::string Start) {
-    Start = std::move(Start);
+  GlobalConfig addStart(std::string StartIn) {
+    Start = std::move(StartIn);
     return *this;
   }
 
@@ -194,12 +212,15 @@ public:
     return *this;
   }
 
+  auto getStart() { return Start; }
+  auto getGlobals() { return utils::makeRange(Globals.begin(), Globals.end()); }
+
   bool hasStart() {
     return !Start.empty();
   }
 
   void dump(std::ostream &S) {
-    S << "start " << Start << "\n" << std::endl;
+    S << "start: " << Start << "\n" << std::endl;
     for (auto &G : Globals)
       G.dump(S);
   }
@@ -220,6 +241,11 @@ public:
   Code addFunction(Function Func) {
     Functions.emplace_back(std::move(Func));
     return *this;
+  }
+
+  auto getGlobal() { return Global; }
+  auto getFunctions() { 
+    return utils::makeRange(Functions.begin(), Functions.end()); 
   }
 
   void dump(std::ostream &S) {

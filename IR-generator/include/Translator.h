@@ -2,9 +2,14 @@
 
 #include <iostream>
 #include <cassert>
+#include <memory>
+#include <array>
 
 #include "Assembler.h"
 #include "Utils.h"
+
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 
 namespace translator {
 
@@ -97,6 +102,25 @@ struct Token {
   std::variant<Section, Function, Label, Assign, Word> Value;
 };
 
+// N - number of functions
+template <size_t N>
+struct IREnv {
+  static constexpr auto RegFileSize = 21ull;
+  static std::array<uint64_t, N * RegFileSize> RegFile;
+};
+
+struct IRToExecute {
+  struct IR_t {
+    std::unique_ptr<llvm::Module> M;
+    std::unique_ptr<llvm::LLVMContext> Ctx;
+  };
+
+  using Mapping_t = std::function<void*(const std::string &)>;
+  IR_t IR;
+  Mapping_t FuncMapper;
+  llvm::Function *StartFunc = nullptr;
+};
+
 std::vector<Token> tokenize(std::string Program);
 
 template <typename It>
@@ -107,5 +131,7 @@ void dumpTokens(It Beg, It End, std::ostream &S) {
 }
 
 assembler::Code parse(std::vector<Token> Program);
+IRToExecute makePseudoLLVMIR(assembler::Code &Code);
+IRToExecute makeLLVMIR(assembler::Code &Code);
 
 } // namespace translator

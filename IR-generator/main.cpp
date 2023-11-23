@@ -1,4 +1,8 @@
 #include "llvm/Support/CommandLine.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/GenericValue.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "Translator.h"
 
@@ -21,12 +25,32 @@ static cl::opt<std::string> DumpMyIR("dump-parsed",
                               cl::desc("File to dump parsed program"),
                               cl::cat(Assembler), cl::init(""));
 
+static cl::opt<bool> GeneratePseudoIR("generate-pseudo-ir",
+                              cl::desc("Generates IR with external calls"),
+                              cl::cat(Assembler), cl::init(false));
+
 void dumpParsed(assembler::Code &Code) {
   auto File = std::ofstream{DumpMyIR};
   if (!File.is_open())
     utils::reportFatalError("Can't open file to dump parsed");
   
   Code.dump(File);
+}
+
+void execute(translator::IRToExecute IRWithEnv) {
+  std::cout << "==Executing code==" << std::endl;
+  IRWithEnv.IR.M->print(outs(), nullptr);
+  
+  std::cout << "==Running==" << std::endl;
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter();
+  auto *EE = EngineBuilder(std::move(IRWithEnv.IR.M)).create();
+  EE->InstallLazyFunctionCreator(IRWithEnv.FuncMapper);
+  EE->finalizeObject();
+
+  auto Args = std::vector<GenericValue>{};
+  EE->runFunction(IRWithEnv.StartFunc, Args);
+  std::cout << "==End==" << std::endl;
 }
 
 template <typename It>
@@ -61,4 +85,7 @@ int main(int Argc, char **Argv) {
   
   if (!DumpMyIR.empty())
     dumpParsed(Code);
+
+  if (GeneratePseudoIR)
+    execute(translator::makePseudoLLVMIR(Code));
 }

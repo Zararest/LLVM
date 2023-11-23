@@ -1,7 +1,11 @@
 #include "../include/Translator.h"
 #include "../include/Assembler.h"
 
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/Support/raw_ostream.h"
+
 #include <algorithm>
+#include <unordered_map>
 
 #define MAKE_INSTR(name)                                     \
   if (!std::holds_alternative<Token::Word>(GlobalIt->Value)) \
@@ -16,7 +20,12 @@
 
 namespace translator {
 
+template <size_t N>
+std::array<uint64_t, N * IREnv<N>::RegFileSize> IREnv<N>::RegFile{};
+
 namespace {
+
+namespace tokenizer {
 
 void removeComments(std::string &Program) {
   constexpr auto Comment = '#';
@@ -54,8 +63,11 @@ Token getToken(std::string Word) {
   return *Res;
 }
 
-using namespace assembler;
+} // namespace tokenizer
 
+namespace parser {
+
+using namespace assembler;
 using TokenIt = std::vector<Token>::iterator;
 
 class Parser {
@@ -75,7 +87,7 @@ class Parser {
       return false;
 
     GlobalIt++;
-    auto Val = utils::stoull(GlobalIt->getName());
+    auto Val = utils::stoll(GlobalIt->getName());
     checkIterator();
     GlobalIt++;
     DEBUG_EXPR(std::cout << "parsed constant" + GlobalIt->getName() << std::endl);
@@ -127,7 +139,7 @@ class Parser {
 
   void parseImm(Instruction &I) {
     checkIterator();
-    I.addArgument(utils::stoull(GlobalIt->getName()));
+    I.addArgument(utils::stoll(GlobalIt->getName()));
     GlobalIt++;
   }
 
@@ -158,11 +170,13 @@ class Parser {
     parseReg(Instr);
     parseImm(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
   bool parseRet(BasicBlock &BB) {
     MAKE_INSTR("ret");
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -171,6 +185,7 @@ class Parser {
     parseReg(Instr);
     parseImm(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -179,18 +194,21 @@ class Parser {
     parseReg(Instr);
     parseLabel(Instr);
     parseLabel(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
   bool parseBr(BasicBlock &BB) {
     MAKE_INSTR("br");
     parseLabel(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
   bool parseCall(BasicBlock &BB) {
     MAKE_INSTR("call");
     parseLabel(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -199,6 +217,7 @@ class Parser {
     parseReg(Instr);
     parseImm(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -207,6 +226,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -214,6 +234,7 @@ class Parser {
     MAKE_INSTR("li");
     parseImm(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -222,6 +243,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -230,6 +252,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -238,6 +261,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -247,6 +271,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -254,6 +279,7 @@ class Parser {
     MAKE_INSTR("mv");
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -285,6 +311,7 @@ class Parser {
     parseLabel(Instr);
     parseLabel(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   } 
 
@@ -293,6 +320,7 @@ class Parser {
     parseReg(Instr);
     parseImm(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -301,6 +329,7 @@ class Parser {
     parseReg(Instr);
     parseImm(Instr);
     parseReg(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -309,6 +338,7 @@ class Parser {
     parseReg(Instr);
     parseImm(Instr);
     parseImm(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -319,6 +349,7 @@ class Parser {
     parseReg(Instr);
     parseLabel(Instr);
     parseLabel(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -327,6 +358,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -334,6 +366,7 @@ class Parser {
     MAKE_INSTR("initRgb");
     parseReg(Instr);
     parseLabel(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -341,6 +374,7 @@ class Parser {
     MAKE_INSTR("loadRgb");
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -350,6 +384,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -358,6 +393,7 @@ class Parser {
     parseReg(Instr);
     parseReg(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -365,6 +401,7 @@ class Parser {
     MAKE_INSTR("xorshift");
     parseLabel(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -372,6 +409,7 @@ class Parser {
     MAKE_INSTR("createDots");
     parseImm(Instr);
     parseRetVal(Instr);
+    BB.addInstruction(Instr);
     return true;
   }
 
@@ -410,6 +448,7 @@ class Parser {
       Parsed |= parseSpecialInstruction(BB);
       HadProgress |= Parsed;
     } while (Parsed);
+    Func.addBlock(BB);
     return HadProgress;
   }
 
@@ -428,6 +467,7 @@ class Parser {
       Parsed |= parseBasicBlock(Func);
       HadProgress |= Parsed;
     } while (Parsed);
+    Code.addFunction(Func);
     DEBUG_EXPR(std::cout << "parsed function: " << Name 
               << "\n" << std::endl);
     return HadProgress;
@@ -475,10 +515,156 @@ public:
   }
 };  
 
+} // namespace parser
+
+namespace IR {
+
+using namespace assembler;
+using BBMap_t = std::unordered_map<std::string, llvm::BasicBlock *>;
+
+// Т - плагин который генерирует инструкции
+template <typename InstrPlugin_t>
+class Generator {
+  InstrPlugin_t InstrGen;
+
+  std::unordered_map<std::string, llvm::Function*> FuncMap;
+  llvm::Function *Start;
+  std::unique_ptr<llvm::Module> M;
+  std::unique_ptr<llvm::LLVMContext> Ctx;
+  std::unique_ptr<llvm::IRBuilder<>> IB;
+
+  void generateFunctions(Code &Code) {
+    auto GlobalCfg = Code.getGlobal();
+    if (!GlobalCfg.hasStart())
+      utils::reportFatalError("No start function");
+    
+    auto StartFuncName = GlobalCfg.getStart();
+
+    for (auto &F : Code.getFunctions()) {
+      auto *FuncType = llvm::FunctionType::get(IB->getVoidTy(), /*isVarArg*/ false);
+      auto FuncName = F.getName();
+      auto *NewFunc = llvm::Function::Create(FuncType, llvm::Function::ExternalLinkage, 
+                                             FuncName, *M);
+      assert(NewFunc);
+      auto [_, Inserted] = FuncMap.emplace(FuncName, NewFunc);
+      if (!Inserted)
+        utils::reportFatalError("Redefinition of <" + FuncName + ">");
+      if (FuncName == StartFuncName)
+        Start = NewFunc;
+    }
+  } 
+
+  void generateGlobals(Code &Code) {
+    auto Cfg = Code.getGlobal();
+    
+    for (auto &G : Cfg.getGlobals()) {
+      auto *GlobT = IB->getInt64Ty();
+      auto GlobVal = llvm::APInt{/*NumBits*/ 64, G.getInitVal()};
+      auto GlobAlign = llvm::MaybeAlign{8};
+      auto *GV = 
+        new llvm::GlobalVariable(*M, GlobT,
+                  /*isConstant*/ false,
+                  /*Linkage*/ llvm::GlobalValue::ExternalLinkage,
+                  /*Initializer*/ llvm::Constant::getIntegerValue(GlobT, GlobVal),
+                  G.getName());
+      GV->setAlignment(GlobAlign);
+    }
+  }
+
+  void generateInBB(BasicBlock &BB, BBMap_t &BBMap) {
+    auto BBName = BB.getLabel();
+    assert(BBMap.find(BBName) != BBMap.end());
+    auto *LLVMBB = BBMap[BBName];
+    assert(LLVMBB);
+    IB->SetInsertPoint(LLVMBB);
+
+    for (auto &I : BB.getInstructions())
+      InstrGen.generateInstruction(I, BBMap);
+  }
+
+  void generateInFunction(Function &F) {
+    auto BBMap = BBMap_t{};
+    auto FuncName = F.getName();
+    assert(FuncMap.find(FuncName) != FuncMap.end());
+    auto *LLVMFunc = FuncMap[FuncName];
+
+    for (auto &BB : F.getBlocks()) {
+      auto BBName = BB.getLabel();
+      auto *LLVMBB = llvm::BasicBlock::Create(*Ctx, BBName, LLVMFunc);
+      assert(LLVMBB);
+      auto [_, Inserted] = BBMap.emplace(BBName, LLVMBB);
+      if (!Inserted)
+        utils::reportFatalError("Duplicating basic block: " + BBName + 
+                                " in <" + FuncName + ">");
+    }
+
+    for (auto &BB : F.getBlocks())
+      generateInBB(BB, BBMap);
+  }
+
+public: 
+  Generator() : InstrGen{M, Ctx, IB, FuncMap} {}
+
+  IRToExecute::IR_t generateIR(Code &Code) {
+    Ctx = std::make_unique<llvm::LLVMContext>();
+    M = std::make_unique<llvm::Module>("Pseudo-IR", *Ctx);
+    IB = std::make_unique<llvm::IRBuilder<>>(*Ctx);
+
+    generateFunctions(Code);
+    generateGlobals(Code);
+    
+    for (auto &F : Code.getFunctions())
+      generateInFunction(F);
+    M->print(llvm::outs(), nullptr);
+    return {std::move(M), std::move(Ctx)};
+  }
+
+  IRToExecute::Mapping_t generateMapper() {
+    return InstrGen.generateMapper();
+  }
+
+  llvm::Function *getStartFunc() { return Start; }
+};
+
+// класс который вставляется в генератор и генерирует инструкции
+class Pseudo {
+  std::unique_ptr<llvm::Module> &M;
+  std::unique_ptr<llvm::LLVMContext> &Ctx;
+  std::unique_ptr<llvm::IRBuilder<>> &IB;
+  std::unordered_map<std::string, llvm::Function*> FuncMap;
+
+public:
+  Pseudo(std::unique_ptr<llvm::Module> &M, 
+         std::unique_ptr<llvm::LLVMContext> &Ctx,
+         std::unique_ptr<llvm::IRBuilder<>> &IB,
+         std::unordered_map<std::string, llvm::Function*> &FuncMap) : M{M}, 
+                                                                      Ctx{Ctx}, 
+                                                                      IB{IB} {}
+  void generateInstruction(Instruction &I, BBMap_t &BBMap) {
+    assert(IB);
+    assert(M);
+    return;
+    auto DotElements = std::vector<llvm::Type *>{IB->getInt64Ty(),
+                                         IB->getInt64Ty(),
+                                         IB->getInt64Ty(),
+                                         IB->getInt32Ty(),
+                                         IB->getInt64Ty()};
+    auto *Dot_t = llvm::StructType::create(*Ctx, DotElements, "Dot");
+    auto *DotsArray_t = llvm::ArrayType::get(IB->getInt64Ty(), 10);
+    auto *Alloca = IB->CreateAlloca(DotsArray_t);
+  } 
+
+  IRToExecute::Mapping_t generateMapper() {
+    return [](const std::string &fnName) -> void * { return nullptr; };
+  }
+};
+
+} // namespace IR
+
 } // namespace
 
 std::vector<Token> tokenize(std::string Program) {
-  removeComments(Program);
+  tokenizer::removeComments(Program);
   std::replace(Program.begin(), Program.end(), ',', ' ');
 
   constexpr auto Delimiters = std::array{' ', '\n', '\t'};
@@ -491,15 +677,20 @@ std::vector<Token> tokenize(std::string Program) {
   while (WordBeg != Program.end()) {
     auto WordEnd = std::find_if_not(WordBeg, Program.end(), NotDelim);
     if (WordBeg != WordEnd)
-      Res.emplace_back(getToken({WordBeg, WordEnd}));
+      Res.emplace_back(tokenizer::getToken({WordBeg, WordEnd}));
     WordBeg = std::find_if(WordEnd, Program.end(), NotDelim);
   }
 
   return Res;
 }
 
-Code parse(std::vector<Token> Program) {
-  return Parser{}.parse(Program);
+assembler::Code parse(std::vector<Token> Program) {
+  return parser::Parser{}.parse(Program);
+}
+
+IRToExecute makePseudoLLVMIR(assembler::Code &Code) {
+  auto Gen = IR::Generator<IR::Pseudo>{};
+  return {Gen.generateIR(Code), Gen.generateMapper(), Gen.getStartFunc()};
 }
 
 } // namespace translator
