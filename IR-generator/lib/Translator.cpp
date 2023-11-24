@@ -8,7 +8,8 @@
 #include <unordered_map>
 
 #define MAKE_INSTR(name)                                     \
-  if (!std::holds_alternative<Token::Word>(GlobalIt->Value)) \
+  if (GlobalIt == End ||                                     \
+      !std::holds_alternative<Token::Word>(GlobalIt->Value)) \
       return false;                                          \
     auto Name = GlobalIt->getName();                         \
     if (Name != name)                                        \
@@ -80,7 +81,8 @@ class Parser {
   }
 
   bool parseConstant(GlobalConfig &Cfg) {
-    if (!std::holds_alternative<Token::Word>(GlobalIt->Value))
+    if (GlobalIt == End || 
+        !std::holds_alternative<Token::Word>(GlobalIt->Value))
       return false;
     auto Name = GlobalIt->getName();
     if (Name == "start") 
@@ -96,7 +98,8 @@ class Parser {
   }
 
   bool parseStart(GlobalConfig &Cfg) {
-    if (!std::holds_alternative<Token::Word>(GlobalIt->Value))
+    if (GlobalIt == End || 
+        !std::holds_alternative<Token::Word>(GlobalIt->Value))
       return false;
     auto Name = GlobalIt->getName();
     if (Name != "start") 
@@ -433,7 +436,8 @@ class Parser {
   }
 
   bool parseBasicBlock(Function &Func) {
-    if (!std::holds_alternative<Token::Label>(GlobalIt->Value))
+    if (GlobalIt == End || 
+        !std::holds_alternative<Token::Label>(GlobalIt->Value))
       return false;
 
     auto HadProgress = false;
@@ -453,7 +457,8 @@ class Parser {
   }
 
   bool parseFunction(Code &Code) {
-    if (!std::holds_alternative<Token::Function>(GlobalIt->Value))
+    if (GlobalIt == End || 
+        !std::holds_alternative<Token::Function>(GlobalIt->Value))
       return false;
     
     auto Name = GlobalIt->getName();
@@ -526,13 +531,13 @@ using BBMap_t = std::unordered_map<std::string, llvm::BasicBlock *>;
 template <typename InstrPlugin_t>
 class Generator {
   InstrPlugin_t InstrGen;
-
-  std::unordered_map<std::string, llvm::Function*> FuncMap;
-  llvm::Function *Start;
   std::unique_ptr<llvm::Module> M;
   std::unique_ptr<llvm::LLVMContext> Ctx;
   std::unique_ptr<llvm::IRBuilder<>> IB;
 
+  std::unordered_map<std::string, llvm::Function*> FuncMap;
+  llvm::Function *Start;
+  
   void generateFunctions(Code &Code) {
     auto GlobalCfg = Code.getGlobal();
     if (!GlobalCfg.hasStart())
@@ -559,15 +564,17 @@ class Generator {
     
     for (auto &G : Cfg.getGlobals()) {
       auto *GlobT = IB->getInt64Ty();
-      auto GlobVal = llvm::APInt{/*NumBits*/ 64, G.getInitVal()};
+      auto GlobVal = llvm::APInt{/*NumBits*/ 64, 
+                                 static_cast<size_t>(G.getInitVal())};
       auto GlobAlign = llvm::MaybeAlign{8};
       auto *GV = 
         new llvm::GlobalVariable(*M, GlobT,
                   /*isConstant*/ false,
                   /*Linkage*/ llvm::GlobalValue::ExternalLinkage,
-                  /*Initializer*/ llvm::Constant::getIntegerValue(GlobT, GlobVal),
+                  /*Initializer*/ nullptr,
                   G.getName());
       GV->setAlignment(GlobAlign);
+      //GV->setInitializer(llvm::Constant::getIntegerValue(GlobT, GlobVal));
     }
   }
 
@@ -620,7 +627,7 @@ public:
   }
 
   IRToExecute::Mapping_t generateMapper() {
-    return InstrGen.generateMapper();
+    return [](const std::string &fnName) -> void * { return nullptr; };
   }
 
   llvm::Function *getStartFunc() { return Start; }
@@ -633,6 +640,31 @@ class Pseudo {
   std::unique_ptr<llvm::IRBuilder<>> &IB;
   std::unordered_map<std::string, llvm::Function*> FuncMap;
 
+  void generateRet(Instruction &I, BBMap_t &BBMap) {
+    IB->CreateRetVoid();
+  }
+
+  void generateIncJump(Instruction &I, BBMap_t &BBMap) {
+    //!!!!
+    auto BrLabel = std::get<Label>(I.getArg(2));
+    IB->CreateBr(BBMap[BrLabel]);
+  }
+
+  void generateJumpIfDot(Instruction &I, BBMap_t &BBMap) {
+    auto BrLabel = std::get<Label>(I.getArg(2));
+    IB->CreateBr(BBMap[BrLabel]);
+  }
+
+  void generateBrCond(Instruction &I, BBMap_t &BBMap) {
+    auto BrLabel = std::get<Label>(I.getArg(1));
+    IB->CreateBr(BBMap[BrLabel]);
+  }
+
+  void generateBr(Instruction &I, BBMap_t &BBMap) {
+    auto BrLabel = std::get<Label>(I.getArg(0));
+    IB->CreateBr(BBMap[BrLabel]);
+  }
+
 public:
   Pseudo(std::unique_ptr<llvm::Module> &M, 
          std::unique_ptr<llvm::LLVMContext> &Ctx,
@@ -641,21 +673,21 @@ public:
                                                                       Ctx{Ctx}, 
                                                                       IB{IB} {}
   void generateInstruction(Instruction &I, BBMap_t &BBMap) {
-    assert(IB);
-    assert(M);
-    return;
-    auto DotElements = std::vector<llvm::Type *>{IB->getInt64Ty(),
-                                         IB->getInt64Ty(),
-                                         IB->getInt64Ty(),
-                                         IB->getInt32Ty(),
-                                         IB->getInt64Ty()};
-    auto *Dot_t = llvm::StructType::create(*Ctx, DotElements, "Dot");
-    auto *DotsArray_t = llvm::ArrayType::get(IB->getInt64Ty(), 10);
-    auto *Alloca = IB->CreateAlloca(DotsArray_t);
+    auto Name = I.getOpcode();
+    if (Name == "ret")
+      generateRet(I, BBMap);
+    if (Name == "incJump")
+      generateIncJump(I, BBMap);
+    if (Name == "jumpIfDot")
+      generateJumpIfDot(I, BBMap);
+    if (Name == "brCond")
+      generateBrCond(I, BBMap);
+    if (Name == "br")
+      generateBr(I, BBMap);
   } 
 
   IRToExecute::Mapping_t generateMapper() {
-    return [](const std::string &fnName) -> void * { return nullptr; };
+    return [](const std::string &FuncName) -> void * { return nullptr; };
   }
 };
 

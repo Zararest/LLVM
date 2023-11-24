@@ -117,7 +117,9 @@ struct IRToExecute {
 
   using Mapping_t = std::function<void*(const std::string &)>;
   IR_t IR;
-  Mapping_t FuncMapper;
+  Mapping_t FuncMapper = [](const std::string &FuncName) -> void * { 
+    return nullptr; 
+  };
   llvm::Function *StartFunc = nullptr;
 };
 

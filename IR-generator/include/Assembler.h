@@ -96,6 +96,10 @@ public:
   auto getOpcode() { return Opcode; }
   auto getReturnValue() { return ReturnValue; }
   auto getArgs() { return utils::makeRange(Args.begin(), Args.end()); }
+  auto getArg(size_t Num) { 
+    assert(Num < Args.size());
+    return Args[Num]; 
+  }
 
   void dump(std::ostream &S) {
     S << Opcode << " ";
