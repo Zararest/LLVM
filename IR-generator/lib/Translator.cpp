@@ -21,9 +21,6 @@
 
 namespace translator {
 
-template <size_t N>
-std::array<uint64_t, N * IREnv<N>::RegFileSize> IREnv<N>::RegFile{};
-
 namespace {
 
 namespace tokenizer {
@@ -527,10 +524,8 @@ namespace IR {
 using namespace assembler;
 using BBMap_t = std::unordered_map<std::string, llvm::BasicBlock *>;
 
-// Т - плагин который генерирует инструкции
-template <typename InstrPlugin_t>
 class Generator {
-  InstrPlugin_t InstrGen;
+protected:
   std::unique_ptr<llvm::Module> M;
   std::unique_ptr<llvm::LLVMContext> Ctx;
   std::unique_ptr<llvm::IRBuilder<>> IB;
@@ -574,7 +569,7 @@ class Generator {
                   /*Initializer*/ nullptr,
                   G.getName());
       GV->setAlignment(GlobAlign);
-      //GV->setInitializer(llvm::Constant::getIntegerValue(GlobT, GlobVal));
+      GV->setInitializer(llvm::Constant::getIntegerValue(GlobT, GlobVal));
     }
   }
 
@@ -586,7 +581,7 @@ class Generator {
     IB->SetInsertPoint(LLVMBB);
 
     for (auto &I : BB.getInstructions())
-      InstrGen.generateInstruction(I, BBMap);
+      generateInstruction(I, BBMap);
   }
 
   void generateInFunction(Function &F) {
@@ -609,8 +604,10 @@ class Generator {
       generateInBB(BB, BBMap);
   }
 
+  virtual void generateInstruction(Instruction &I, BBMap_t &BBMap) = 0;
+
 public: 
-  Generator() : InstrGen{M, Ctx, IB, FuncMap} {}
+  virtual ~Generator() = default;
 
   IRToExecute::IR_t generateIR(Code &Code) {
     Ctx = std::make_unique<llvm::LLVMContext>();
@@ -626,20 +623,14 @@ public:
     return {std::move(M), std::move(Ctx)};
   }
 
-  IRToExecute::Mapping_t generateMapper() {
-    return [](const std::string &fnName) -> void * { return nullptr; };
-  }
-
   llvm::Function *getStartFunc() { return Start; }
+
+  virtual 
+  std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() = 0;
 };
 
-// класс который вставляется в генератор и генерирует инструкции
-class Pseudo {
-  std::unique_ptr<llvm::Module> &M;
-  std::unique_ptr<llvm::LLVMContext> &Ctx;
-  std::unique_ptr<llvm::IRBuilder<>> &IB;
-  std::unordered_map<std::string, llvm::Function*> FuncMap;
 
+class PseudoGenerator final : public Generator {  
   void generateRet(Instruction &I, BBMap_t &BBMap) {
     IB->CreateRetVoid();
   }
@@ -651,7 +642,7 @@ class Pseudo {
   }
 
   void generateJumpIfDot(Instruction &I, BBMap_t &BBMap) {
-    auto BrLabel = std::get<Label>(I.getArg(2));
+    auto BrLabel = std::get<Label>(I.getArg(3));
     IB->CreateBr(BBMap[BrLabel]);
   }
 
@@ -666,13 +657,7 @@ class Pseudo {
   }
 
 public:
-  Pseudo(std::unique_ptr<llvm::Module> &M, 
-         std::unique_ptr<llvm::LLVMContext> &Ctx,
-         std::unique_ptr<llvm::IRBuilder<>> &IB,
-         std::unordered_map<std::string, llvm::Function*> &FuncMap) : M{M}, 
-                                                                      Ctx{Ctx}, 
-                                                                      IB{IB} {}
-  void generateInstruction(Instruction &I, BBMap_t &BBMap) {
+  void generateInstruction(Instruction &I, BBMap_t &BBMap) override {
     auto Name = I.getOpcode();
     if (Name == "ret")
       generateRet(I, BBMap);
@@ -686,8 +671,13 @@ public:
       generateBr(I, BBMap);
   } 
 
-  IRToExecute::Mapping_t generateMapper() {
-    return [](const std::string &FuncName) -> void * { return nullptr; };
+  std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() override {
+    auto RegFilePtr = std::unique_ptr<uint64_t>{};
+    auto *BufPtr = RegFilePtr.get();
+    auto Mapper = [BufPtr](const std::string &FuncName) -> void * { 
+        return nullptr; 
+      };
+    return {std::move(Mapper), std::move(RegFilePtr)};
   }
 };
 
@@ -721,8 +711,10 @@ assembler::Code parse(std::vector<Token> Program) {
 }
 
 IRToExecute makePseudoLLVMIR(assembler::Code &Code) {
-  auto Gen = IR::Generator<IR::Pseudo>{};
-  return {Gen.generateIR(Code), Gen.generateMapper(), Gen.getStartFunc()};
+  auto Gen = IR::PseudoGenerator{};
+  auto [Mapper, RegFile] = Gen.generateMapper();
+  return {Gen.generateIR(Code), std::move(Mapper), 
+          std::move(RegFile), Gen.getStartFunc()};
 }
 
 } // namespace translator

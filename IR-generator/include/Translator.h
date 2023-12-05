@@ -102,13 +102,6 @@ struct Token {
   std::variant<Section, Function, Label, Assign, Word> Value;
 };
 
-// N - number of functions
-template <size_t N>
-struct IREnv {
-  static constexpr auto RegFileSize = 21ull;
-  static std::array<uint64_t, N * RegFileSize> RegFile;
-};
-
 struct IRToExecute {
   struct IR_t {
     std::unique_ptr<llvm::Module> M;
@@ -116,10 +109,12 @@ struct IRToExecute {
   };
 
   using Mapping_t = std::function<void*(const std::string &)>;
+  using RegFile_t = std::unique_ptr<uint64_t>;
+
   IR_t IR;
-  Mapping_t FuncMapper = [](const std::string &FuncName) -> void * { 
-    return nullptr; 
-  };
+  Mapping_t FuncMapper = 
+    [](const std::string &FuncName) -> void * { return nullptr; };
+  RegFile_t RegFile;
   llvm::Function *StartFunc = nullptr;
 };
 
