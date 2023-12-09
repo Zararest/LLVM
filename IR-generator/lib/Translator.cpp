@@ -559,6 +559,7 @@ protected:
   std::unordered_map<std::string, llvm::Function*> FuncMap;
   llvm::Function *Start;
 
+private:
   auto *getArgRegFile() {
     ArgRegFile_t = llvm::ArrayType::get(IB->getInt64Ty(), ArgsRegFileSize);
     M->getOrInsertGlobal("argRegFile", ArgRegFile_t);
@@ -654,6 +655,7 @@ protected:
       generateInBB(BB, BasicBlockEnv{BBMap, F.getName()});
   }
 
+protected:
   virtual void generateInstruction(Instruction &I, InstructionEnv Env) = 0;
   virtual void initAllTypes() = 0;
 
@@ -681,30 +683,12 @@ public:
 };
 
 
-class PseudoGenerator final : public Generator {  
+class ControlFlowGenerator : public Generator {  
+protected:
   llvm::StructType *Dot_t = nullptr;
   llvm::StructType *RGB_t = nullptr;
 
-  llvm::Value *generateRegVal(Register &Reg, const std::string &FuncName) {
-    if (Reg.getClass() == 'r') {
-      auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
-      return IB->CreateLoad(IB->getInt64Ty(), Gep);
-    }
-    if (Reg.getClass() == 'a') {
-      auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
-      return IB->CreateLoad(IB->getInt64Ty(), Gep);
-    }
-    if (Reg.getClass() == 't') {
-      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
-      auto RegFileOffset = FuncToRegFileMap[FuncName];
-      auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
-                                         RegFileOffset + Reg.getNumber());
-      return IB->CreateLoad(IB->getInt64Ty(), Gep);
-    }
-    utils::reportFatalError("Unknown reg class");
-    return nullptr;
-  }
-
+private:
   void generateRet(Instruction &I, InstructionEnv &Env) {
     IB->CreateRetVoid();
   }
@@ -776,7 +760,27 @@ class PseudoGenerator final : public Generator {
     IB->CreateBr(Label);
   }
 
-public:
+  void generateExternalCall(const std::string &Name) {
+    auto Args = std::vector<llvm::Type *>{};
+    auto Func_t = llvm::FunctionType::get(IB->getVoidTy(), 
+                                          Args, 
+                                          /*isVarArg*/ false);
+    auto FuncCallee = M->getOrInsertFunction(Name, Func_t);
+
+    IB->CreateCall(FuncCallee);
+  }
+
+  void generateCall(Instruction &I, InstructionEnv &Env) {
+    auto FuncName = std::get<Label>(I.getArg(0));
+    if (FuncMap.find(FuncName) == FuncMap.end()) {
+      generateExternalCall(FuncName);
+      return;
+    }
+    auto FuncPtr = FuncMap[FuncName];
+
+    IB->CreateCall(FuncPtr);
+  }
+
   void initAllTypes() override {
     auto RGBElements = std::vector<llvm::Type *>{IB->getInt8Ty(),
                                          IB->getInt8Ty(),
@@ -792,21 +796,85 @@ public:
     Dot_t = llvm::StructType::create(*Ctx, DotElements, "Dot");
   }
 
-  void generateInstruction(Instruction &I, InstructionEnv Env) override {
+  bool generateControlFlowInstruction(Instruction &I, InstructionEnv Env) {
     auto Name = I.getOpcode();
-    if (Name == "ret")
+    if (Name == "ret") {
       generateRet(I, Env);
-    if (Name == "incJump")
+      return true;
+    }
+    if (Name == "incJump") {
       generateIncJump(I, Env);
-    if (Name == "jumpIfDot")
+      return true;
+    }
+    if (Name == "jumpIfDot") {
       generateJumpIfDot(I, Env);
-    if (Name == "brCond")
+      return true;
+    }
+    if (Name == "brCond") {
       generateBrCond(I, Env);
-    if (Name == "br")
+      return true;
+    }
+    if (Name == "br") {
       generateBr(I, Env);
+      return true;
+    }
+    if (Name == "call") {
+      generateCall(I, Env);
+      return true;
+    }
+    return false;
+  }
+
+protected:
+  llvm::Value *generateRegVal(Register &Reg, const std::string &FuncName) {
+    if (Reg.getClass() == 'r') {
+      auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    if (Reg.getClass() == 'a') {
+      auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    if (Reg.getClass() == 't') {
+      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
+      auto RegFileOffset = FuncToRegFileMap[FuncName];
+      auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
+                                         RegFileOffset + Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    utils::reportFatalError("Unknown reg class");
+    return nullptr;
+  }
+
+  virtual void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) = 0;
+
+public:
+  virtual ~ControlFlowGenerator() = default;
+
+  void generateInstruction(Instruction &I, InstructionEnv Env) override {
+    if (generateControlFlowInstruction(I, Env))
+      return;
+    generateDataFlowInstruction(I, Env);
   } 
-  // в случае псевдо асма мне надо будет замапать все рег файлы
-  // в случа нормального асма только для ввызова функций
+  
+  std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() override {
+    auto RegFilePtr = std::unique_ptr<uint64_t>{};
+    auto *BufPtr = RegFilePtr.get();
+    auto Mapper = [BufPtr](const std::string &FuncName) -> void * { 
+        return nullptr; 
+      };
+    return {std::move(Mapper), std::move(RegFilePtr)};
+  }
+};
+
+class PseudoGenerator final : public ControlFlowGenerator {
+
+  void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) override {
+
+    //utils::reportFatalError("Unknown instruction:");
+  }
+
+public:
   std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() override {
     auto RegFilePtr = std::unique_ptr<uint64_t>{};
     auto *BufPtr = RegFilePtr.get();
