@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <unordered_map>
+#include <utility>
 
 #define MAKE_INSTR(name)                                     \
   if (GlobalIt == End ||                                     \
@@ -522,16 +523,60 @@ public:
 namespace IR {
 
 using namespace assembler;
-using BBMap_t = std::unordered_map<std::string, llvm::BasicBlock *>;
 
 class Generator {
 protected:
+  using BBMap_t = std::unordered_map<std::string, llvm::BasicBlock *>;
+
+  struct InstructionEnv {
+    BBMap_t &BBMap;
+    const std::string &FuncName;
+  };
+
+  struct BasicBlockEnv {
+    BBMap_t &BBMap;
+    const std::string &FuncName;
+  };
+
+  // each function has its own register file
+  constexpr static auto TmpRegFileSize = 12u;
+  // argument registers file is unique
+  constexpr static auto ArgsRegFileSize = 3u;
+
   std::unique_ptr<llvm::Module> M;
   std::unique_ptr<llvm::LLVMContext> Ctx;
   std::unique_ptr<llvm::IRBuilder<>> IB;
+  
+  llvm::ArrayType *TmpRegFile_t = nullptr;
+  llvm::GlobalVariable *TmpRegFile = nullptr; 
+  llvm::ArrayType *ArgRegFile_t = nullptr;
+  llvm::GlobalVariable *ArgRegFile = nullptr;
+  llvm::ArrayType *RetValReg_t = nullptr;
+  llvm::GlobalVariable *RetValReg = nullptr;
 
+  // offset in tp reg file in register sizes
+  std::unordered_map<std::string, size_t> FuncToRegFileMap;
   std::unordered_map<std::string, llvm::Function*> FuncMap;
   llvm::Function *Start;
+
+  auto *getArgRegFile() {
+    ArgRegFile_t = llvm::ArrayType::get(IB->getInt64Ty(), ArgsRegFileSize);
+    M->getOrInsertGlobal("argRegFile", ArgRegFile_t);
+    return M->getNamedGlobal("argRegFile");
+  }
+
+  auto *getTmpRegFile() {
+    auto NumOfRegs = FuncToRegFileMap.size() * TmpRegFileSize;
+    TmpRegFile_t = llvm::ArrayType::get(IB->getInt64Ty(), NumOfRegs);
+    M->getOrInsertGlobal("tmpRegFile", TmpRegFile_t);
+    return M->getNamedGlobal("tmpRegFile");
+  }
+
+  auto *getRetValReg() {
+    RetValReg_t = llvm::ArrayType::get(IB->getInt64Ty(), 1);
+    M->getOrInsertGlobal("retValReg", RetValReg_t);
+    return M->getNamedGlobal("retValReg");
+  }
   
   void generateFunctions(Code &Code) {
     auto GlobalCfg = Code.getGlobal();
@@ -541,8 +586,9 @@ protected:
     auto StartFuncName = GlobalCfg.getStart();
 
     for (auto &F : Code.getFunctions()) {
-      auto *FuncType = llvm::FunctionType::get(IB->getVoidTy(), /*isVarArg*/ false);
       auto FuncName = F.getName();
+      FuncToRegFileMap[FuncName] = FuncToRegFileMap.size() * TmpRegFileSize;
+      auto *FuncType = llvm::FunctionType::get(IB->getVoidTy(), /*isVarArg*/ false);
       auto *NewFunc = llvm::Function::Create(FuncType, llvm::Function::ExternalLinkage, 
                                              FuncName, *M);
       assert(NewFunc);
@@ -555,8 +601,11 @@ protected:
   } 
 
   void generateGlobals(Code &Code) {
+    ArgRegFile = getArgRegFile();
+    TmpRegFile = getTmpRegFile();
+    RetValReg = getRetValReg();
+
     auto Cfg = Code.getGlobal();
-    
     for (auto &G : Cfg.getGlobals()) {
       auto *GlobT = IB->getInt64Ty();
       auto GlobVal = llvm::APInt{/*NumBits*/ 64, 
@@ -573,15 +622,16 @@ protected:
     }
   }
 
-  void generateInBB(BasicBlock &BB, BBMap_t &BBMap) {
+  void generateInBB(BasicBlock &BB, BasicBlockEnv BBEnv) {
     auto BBName = BB.getLabel();
+    auto &BBMap = BBEnv.BBMap;
     assert(BBMap.find(BBName) != BBMap.end());
     auto *LLVMBB = BBMap[BBName];
     assert(LLVMBB);
     IB->SetInsertPoint(LLVMBB);
 
     for (auto &I : BB.getInstructions())
-      generateInstruction(I, BBMap);
+      generateInstruction(I, InstructionEnv{BBMap, BBEnv.FuncName});
   }
 
   void generateInFunction(Function &F) {
@@ -601,10 +651,11 @@ protected:
     }
 
     for (auto &BB : F.getBlocks())
-      generateInBB(BB, BBMap);
+      generateInBB(BB, BasicBlockEnv{BBMap, F.getName()});
   }
 
-  virtual void generateInstruction(Instruction &I, BBMap_t &BBMap) = 0;
+  virtual void generateInstruction(Instruction &I, InstructionEnv Env) = 0;
+  virtual void initAllTypes() = 0;
 
 public: 
   virtual ~Generator() = default;
@@ -613,13 +664,13 @@ public:
     Ctx = std::make_unique<llvm::LLVMContext>();
     M = std::make_unique<llvm::Module>("Pseudo-IR", *Ctx);
     IB = std::make_unique<llvm::IRBuilder<>>(*Ctx);
+    initAllTypes();
 
     generateFunctions(Code);
     generateGlobals(Code);
     
     for (auto &F : Code.getFunctions())
       generateInFunction(F);
-    M->print(llvm::outs(), nullptr);
     return {std::move(M), std::move(Ctx)};
   }
 
@@ -631,46 +682,131 @@ public:
 
 
 class PseudoGenerator final : public Generator {  
-  void generateRet(Instruction &I, BBMap_t &BBMap) {
+  llvm::StructType *Dot_t = nullptr;
+  llvm::StructType *RGB_t = nullptr;
+
+  llvm::Value *generateRegVal(Register &Reg, const std::string &FuncName) {
+    if (Reg.getClass() == 'r') {
+      auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    if (Reg.getClass() == 'a') {
+      auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    if (Reg.getClass() == 't') {
+      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
+      auto RegFileOffset = FuncToRegFileMap[FuncName];
+      auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
+                                         RegFileOffset + Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    utils::reportFatalError("Unknown reg class");
+    return nullptr;
+  }
+
+  void generateRet(Instruction &I, InstructionEnv &Env) {
     IB->CreateRetVoid();
   }
 
-  void generateIncJump(Instruction &I, BBMap_t &BBMap) {
-    //!!!!
-    auto BrLabel = std::get<Label>(I.getArg(2));
-    IB->CreateBr(BBMap[BrLabel]);
+  void generateIncJump(Instruction &I, InstructionEnv &Env) {
+    auto *Const1i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 1);
+
+    auto Reg = std::get<Register>(I.getArg(0));
+    auto *RegToInc = generateRegVal(Reg, Env.FuncName);
+    auto ImmToCmpVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmToCmp = llvm::ConstantInt::get(IB->getInt64Ty(), ImmToCmpVal);
+    auto Label1Name = std::get<Label>(I.getArg(2));
+    assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
+    auto *Label1 = Env.BBMap[Label1Name];
+    auto Label2Name = std::get<Label>(I.getArg(3));
+    assert(Env.BBMap.find(Label2Name) != Env.BBMap.end());
+    auto *Label2 = Env.BBMap[Label2Name];
+
+    auto *Val = IB->CreateAdd(RegToInc, Const1i64);
+    auto *Cond = IB->CreateICmpEQ(Val, ImmToCmp);
+
+    IB->CreateCondBr(Cond, Label1, Label2);
   }
 
-  void generateJumpIfDot(Instruction &I, BBMap_t &BBMap) {
-    auto BrLabel = std::get<Label>(I.getArg(3));
-    IB->CreateBr(BBMap[BrLabel]);
+  void generateJumpIfDot(Instruction &I, InstructionEnv &Env) {
+    auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtrI64 = generateRegVal(StructPtrReg, Env.FuncName);
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = llvm::ConstantInt::get(IB->getInt32Ty(), ImmOffVal);
+    auto RegToCmp = std::get<Register>(I.getArg(2));
+    auto *ValCmpWith = generateRegVal(RegToCmp, Env.FuncName);
+    auto Label1Name = std::get<Label>(I.getArg(3));
+    assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
+    auto *Label1 = Env.BBMap[Label1Name];
+    auto Label2Name = std::get<Label>(I.getArg(4));
+    assert(Env.BBMap.find(Label2Name) != Env.BBMap.end());
+    auto *Label2 = Env.BBMap[Label2Name];
+    
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
+    auto Values = std::vector<llvm::Value *>{Const0i64, ImmOff};
+    auto *Ptr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    auto *Field = IB->CreateAlignedLoad(IB->getInt64Ty(), Ptr, llvm::MaybeAlign{8});
+    auto *Cond = IB->CreateICmpUGT(ValCmpWith, Field);
+
+    IB->CreateCondBr(Cond, Label1, Label2);
   }
 
-  void generateBrCond(Instruction &I, BBMap_t &BBMap) {
-    auto BrLabel = std::get<Label>(I.getArg(1));
-    IB->CreateBr(BBMap[BrLabel]);
+  void generateBrCond(Instruction &I, InstructionEnv &Env) {
+    
+    auto CondReg = std::get<Register>(I.getArg(0));
+    auto *Cond = generateRegVal(CondReg, Env.FuncName);
+    auto Label1Name = std::get<Label>(I.getArg(1));
+    assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
+    auto *Label1 = Env.BBMap[Label1Name];
+    auto Label2Name = std::get<Label>(I.getArg(2));
+    assert(Env.BBMap.find(Label2Name) != Env.BBMap.end());
+    auto *Label2 = Env.BBMap[Label2Name];
+
+    IB->CreateCondBr(Cond, Label1, Label2);
   }
 
-  void generateBr(Instruction &I, BBMap_t &BBMap) {
-    auto BrLabel = std::get<Label>(I.getArg(0));
-    IB->CreateBr(BBMap[BrLabel]);
+  void generateBr(Instruction &I, InstructionEnv &Env) {
+    auto LabelName = std::get<Label>(I.getArg(0));
+    assert(Env.BBMap.find(LabelName) != Env.BBMap.end());
+    auto *Label = Env.BBMap[LabelName];
+
+    IB->CreateBr(Label);
   }
 
 public:
-  void generateInstruction(Instruction &I, BBMap_t &BBMap) override {
+  void initAllTypes() override {
+    auto RGBElements = std::vector<llvm::Type *>{IB->getInt8Ty(),
+                                         IB->getInt8Ty(),
+                                         IB->getInt8Ty()};
+    RGB_t = llvm::StructType::create(*Ctx, RGBElements, "RGB");
+
+    auto DotElements = std::vector<llvm::Type *>{IB->getInt64Ty(),
+                                         IB->getInt64Ty(),
+                                         IB->getInt64Ty(),
+                                         IB->getInt32Ty(),
+                                         IB->getInt64Ty(),
+                                         RGB_t};
+    Dot_t = llvm::StructType::create(*Ctx, DotElements, "Dot");
+  }
+
+  void generateInstruction(Instruction &I, InstructionEnv Env) override {
     auto Name = I.getOpcode();
     if (Name == "ret")
-      generateRet(I, BBMap);
+      generateRet(I, Env);
     if (Name == "incJump")
-      generateIncJump(I, BBMap);
+      generateIncJump(I, Env);
     if (Name == "jumpIfDot")
-      generateJumpIfDot(I, BBMap);
+      generateJumpIfDot(I, Env);
     if (Name == "brCond")
-      generateBrCond(I, BBMap);
+      generateBrCond(I, Env);
     if (Name == "br")
-      generateBr(I, BBMap);
+      generateBr(I, Env);
   } 
-
+  // в случае псевдо асма мне надо будет замапать все рег файлы
+  // в случа нормального асма только для ввызова функций
   std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() override {
     auto RegFilePtr = std::unique_ptr<uint64_t>{};
     auto *BufPtr = RegFilePtr.get();
