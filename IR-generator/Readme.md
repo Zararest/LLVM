@@ -106,10 +106,10 @@ r0 - возвращаемое значение
   Cmp2 = icmp ult i64 ValCmpWith, Val2
   Val = and i1 Cmp1, Cmp2
 
-[norm]: (norm) (mul + mul + add) (x1) (x2)
+[norm]: (Norm) (mul + mul + add) (x1) (x2)
   x1Square = mul i64 x1, x1
   x2Square = mul i64 x2, x2
-  norm = add i64 x1Square, x2Square 
+  Norm = add i64 x1Square, x2Square 
 
 [xorshift]: (Val) (xorshift) (Seed)
   %1 = load i64, i64* Seed, align 8, !tbaa !2

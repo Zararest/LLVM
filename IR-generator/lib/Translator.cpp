@@ -557,6 +557,7 @@ protected:
   // offset in tp reg file in register sizes
   std::unordered_map<std::string, size_t> FuncToRegFileMap;
   std::unordered_map<std::string, llvm::Function*> FuncMap;
+  std::unordered_map<std::string, llvm::GlobalVariable*> GVMap;
   llvm::Function *Start;
 
 private:
@@ -620,6 +621,7 @@ private:
                   G.getName());
       GV->setAlignment(GlobAlign);
       GV->setInitializer(llvm::Constant::getIntegerValue(GlobT, GlobVal));
+      GVMap[G.getName()] = GV;
     }
   }
 
@@ -794,6 +796,8 @@ private:
                                          IB->getInt64Ty(),
                                          RGB_t};
     Dot_t = llvm::StructType::create(*Ctx, DotElements, "Dot");
+
+    initSubTypes();
   }
 
   bool generateControlFlowInstruction(Instruction &I, InstructionEnv Env) {
@@ -847,6 +851,7 @@ protected:
   }
 
   virtual void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) = 0;
+  virtual void initSubTypes() = 0;
 
 public:
   virtual ~ControlFlowGenerator() = default;
@@ -868,10 +873,411 @@ public:
 };
 
 class PseudoGenerator final : public ControlFlowGenerator {
+  llvm::FunctionType *Func0Args_t = nullptr;
+  llvm::FunctionType *Func1Args_t = nullptr;
+  llvm::FunctionType *Func2Args_t = nullptr;
+  llvm::FunctionType *Func3Args_t = nullptr;
+  llvm::FunctionType *Func4Args_t = nullptr;
+
+  // Registers have classes, so this function makes general numeration for them
+  size_t getRegisterNumber(Register Reg) {
+    constexpr auto RegFileStep = 32u;
+    return Reg.getClass() * RegFileStep + Reg.getNumber();
+  }
+
+  void generateLoadDotFiled(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_loadDorField", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = IB->getInt64(ImmOffVal);
+    auto Args = std::vector<llvm::Value *>{Val, StructPtr, ImmOff};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateStoreDotField(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_storeDotField", Func3Args_t);
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = IB->getInt64(ImmOffVal);
+    auto ValToStoreReg = std::get<Register>(I.getArg(2));
+    auto *ValToStore = IB->getInt64(getRegisterNumber(ValToStoreReg));
+    auto Args = std::vector<llvm::Value *>{StructPtr, ImmOff, ValToStore};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateStoreDotFieldImm(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_storeDotFieldImm", Func3Args_t);
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = IB->getInt64(ImmOffVal);
+    auto ImmToStoreVal = std::get<Immidiate>(I.getArg(2));
+    auto *ImmToStore = IB->getInt64(ImmToStoreVal);
+    auto Args = std::vector<llvm::Value *>{StructPtr, ImmOff, ImmToStore};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateGetDotAddr(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_getDotAddr", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto AddrReg = *I.getReturnValue();
+    auto *Addr = IB->getInt64(getRegisterNumber(AddrReg));
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto ValOffReg = std::get<Register>(I.getArg(1));
+    auto *ValOff = IB->getInt64(getRegisterNumber(ValOffReg));
+    auto Args = std::vector<llvm::Value *>{Addr, StructPtr, ValOff};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateInitRgb(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_initRgb", Func2Args_t);
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto GVName = std::get<Label>(I.getArg(1));
+    assert(GVMap.find(GVName) != GVMap.end());
+    auto *Seed = GVMap[GVName];
+    auto Args = std::vector<llvm::Value *>{StructPtr, Seed};
+    //probably needs bitcast
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateLoadRgb(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_loadRgb", Func2Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto Args = std::vector<llvm::Value *>{Val, StructPtr};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateCmpTwo(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_cmpTwo", Func4Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValCmpWithReg = std::get<Register>(I.getArg(0));
+    auto *ValCmpWith = IB->getInt64(getRegisterNumber(ValCmpWithReg));
+    auto Val1Reg = std::get<Register>(I.getArg(1));
+    auto *Val1 = IB->getInt64(getRegisterNumber(Val1Reg));
+    auto Val2Reg = std::get<Register>(I.getArg(2));
+    auto *Val2 = IB->getInt64(getRegisterNumber(Val2Reg));
+    auto Args = std::vector<llvm::Value *>{Val, ValCmpWith, Val1, Val2};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateNorm(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_norm", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto NormReg = *I.getReturnValue();
+    auto *Norm = IB->getInt64(getRegisterNumber(NormReg));
+    auto X1Reg = std::get<Register>(I.getArg(0));
+    auto *X1 = IB->getInt64(getRegisterNumber(X1Reg));
+    auto X2Reg = std::get<Register>(I.getArg(1));
+    auto *X2 = IB->getInt64(getRegisterNumber(X2Reg));
+    auto Args = std::vector<llvm::Value *>{Norm, X1, X2};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateXorshift(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_xorshift", Func2Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto GVName = std::get<Label>(I.getArg(0));
+    assert(GVMap.find(GVName) != GVMap.end());
+    auto *Seed = GVMap[GVName];
+    auto Args = std::vector<llvm::Value *>{Val, Seed};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateCreateDots(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_createDots", Func2Args_t);
+
+    assert(I.getReturnValue());
+    auto PtrReg = *I.getReturnValue();
+    auto *Ptr = IB->getInt64(getRegisterNumber(PtrReg));
+    auto ImmSizeVal = std::get<Immidiate>(I.getArg(0));
+    auto *ImmSize = IB->getInt64(ImmSizeVal);
+    auto Args = std::vector<llvm::Value *>{Ptr, ImmSize};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateAnd(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_and", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValInReg = std::get<Register>(I.getArg(0));
+    auto *ValIn = IB->getInt64(getRegisterNumber(ValInReg));
+    auto ImmVal = std::get<Immidiate>(I.getArg(1));
+    auto *Imm = IB->getInt64(ImmVal);
+    auto Args = std::vector<llvm::Value *>{Val, ValIn, Imm};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateCmpEqImm(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_cmpEqImm", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValInReg = std::get<Register>(I.getArg(0));
+    auto *ValIn = IB->getInt64(getRegisterNumber(ValInReg));
+    auto ImmVal = std::get<Immidiate>(I.getArg(1));
+    auto *Imm = IB->getInt64(ImmVal);
+    auto Args = std::vector<llvm::Value *>{Val, ValIn, Imm};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateCmpUGTImm(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_cmpUGTImm", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValInReg = std::get<Register>(I.getArg(0));
+    auto *ValIn = IB->getInt64(getRegisterNumber(ValInReg));
+    auto ImmVal = std::get<Immidiate>(I.getArg(1));
+    auto *Imm = IB->getInt64(ImmVal);
+    auto Args = std::vector<llvm::Value *>{Val, ValIn, Imm};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateCmpUGT(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_cmpUGT", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValLhsReg = std::get<Register>(I.getArg(0));
+    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto ValRhsReg = std::get<Register>(I.getArg(1));
+    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateLi(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_li", Func2Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ImmVal = std::get<Immidiate>(I.getArg(0));
+    auto *Imm = IB->getInt64(ImmVal);
+    auto Args = std::vector<llvm::Value *>{Val, Imm};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateMul(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_mul", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValLhsReg = std::get<Register>(I.getArg(0));
+    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto ValRhsReg = std::get<Register>(I.getArg(1));
+    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateAdd(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_add", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValLhsReg = std::get<Register>(I.getArg(0));
+    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto ValRhsReg = std::get<Register>(I.getArg(1));
+    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateSub(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_sub", Func3Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto ValLhsReg = std::get<Register>(I.getArg(0));
+    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto ValRhsReg = std::get<Register>(I.getArg(1));
+    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateSelect(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_select", Func4Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto CondReg = std::get<Register>(I.getArg(0));
+    auto *Cond = IB->getInt64(getRegisterNumber(CondReg));
+    auto ValIn1Reg = std::get<Register>(I.getArg(1));
+    auto *ValIn1 = IB->getInt64(getRegisterNumber(ValIn1Reg));
+    auto ValIn2Reg = std::get<Register>(I.getArg(2));
+    auto *ValIn2 = IB->getInt64(getRegisterNumber(ValIn2Reg));
+    auto Args = std::vector<llvm::Value *>{Val, Cond, ValIn1, ValIn2};
+
+    IB->CreateCall(Func, Args);
+  }
+
+  void generateMv(Instruction &I, InstructionEnv Env) {
+    auto Func = M->getOrInsertFunction("do_mv", Func2Args_t);
+
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto RegReg = std::get<Register>(I.getArg(0));
+    auto *Reg = IB->getInt64(getRegisterNumber(RegReg));
+    auto Args = std::vector<llvm::Value *>{Val, Reg};
+
+    IB->CreateCall(Func, Args);
+  }
 
   void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) override {
+    auto Name = I.getOpcode();
+    if (Name == "loadDotField") {
+      generateLoadDotFiled(I, Env);
+      return;
+    }
+    if (Name == "storeDotField") {
+      generateStoreDotField(I, Env);
+      return;
+    }
+    if (Name == "storeDotFieldImm") {
+      generateStoreDotFieldImm(I, Env);
+      return;
+    }
+    if (Name == "getDotAddr") {
+      generateGetDotAddr(I, Env);
+      return;
+    }
+    if (Name == "initRgb") {
+      generateInitRgb(I, Env);
+      return;
+    }
+    if (Name == "loadRgb") {
+      generateLoadRgb(I, Env);
+      return;
+    }
+    if (Name == "cmpTwo") {
+      generateCmpTwo(I, Env);
+      return;
+    }
+    if (Name == "norm") {
+      generateNorm(I, Env);
+      return;
+    }
+    if (Name == "xorshift") {
+      generateXorshift(I, Env);
+      return;
+    }
+    if (Name == "createDots") {
+      generateCreateDots(I, Env);
+      return;
+    }
+    if (Name == "and") {
+      generateAnd(I, Env);
+      return;
+    }
+    if (Name == "cmpEqImm") {
+      generateCmpEqImm(I, Env);
+      return;
+    }
+    if (Name == "cmpUGTImm") {
+      generateCmpUGTImm(I, Env);
+      return;
+    }
+    if (Name == "cmpUGT") {
+      generateCmpUGT(I, Env);
+      return;
+    }
+    if (Name == "li") {
+      generateLi(I, Env);
+      return;
+    }
+    if (Name == "mul") {
+      generateMul(I, Env);
+      return;
+    }
+    if (Name == "add") {
+      generateAdd(I, Env);
+      return;
+    }
+    if (Name == "sub") {
+      generateSub(I, Env);
+      return;
+    }
+    if (Name == "select") {
+      generateSelect(I, Env);
+      return;
+    }
+    if (Name == "mv") {
+      generateMv(I, Env);
+      return;
+    }
+    utils::reportFatalError("Unknown instruction:");
+  }
 
-    //utils::reportFatalError("Unknown instruction:");
+  void initSubTypes() override {
+    auto *Void_t = llvm::Type::getVoidTy(*Ctx);
+    auto *I64_t = llvm::Type::getInt64Ty(*Ctx);
+    auto Args = std::vector<llvm::Type *>{Void_t};
+    Func0Args_t = llvm::FunctionType::get(Void_t, Args, /*isVarArg*/ false);
+
+    Args = std::vector<llvm::Type *>{I64_t};
+    Func1Args_t = llvm::FunctionType::get(Void_t, Args, /*isVarArg*/ false);
+
+    Args.push_back(I64_t);
+    Func2Args_t = llvm::FunctionType::get(Void_t, Args, /*isVarArg*/ false);
+    
+    Args.push_back(I64_t);
+    Func3Args_t = llvm::FunctionType::get(Void_t, Args, /*isVarArg*/ false);
+
+    Args.push_back(I64_t);
+    Func4Args_t = llvm::FunctionType::get(Void_t, Args, /*isVarArg*/ false);
   }
 
 public:
