@@ -29,7 +29,7 @@ ENTRY:
   brCond t1, BB1, BB3
 BB1:
   jumpIfDot a0, 2, t2, BB3, BB2
-BB2: #pred: entry# 
+BB2:  
   #регситр a0 уже правильный#
   call changePosition
   br BB6
@@ -176,4 +176,4 @@ BB2:
   mv t0 -> a0
   call drawFrame
   call simFlush
-  incJump t1, 100, BB1, BB2 -> t1
+  incJump t1, 1, BB1, BB2 -> t1

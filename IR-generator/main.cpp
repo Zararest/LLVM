@@ -5,6 +5,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "Translator.h"
+#include "Graphics.h"
 
 #include <sstream>
 #include <fstream>
@@ -50,7 +51,10 @@ void execute(translator::IRToExecute IRWithEnv) {
   EE->finalizeObject();
 
   auto Args = std::vector<GenericValue>{};
+
+  lib::simInit();
   EE->runFunction(IRWithEnv.StartFunc, Args);
+  lib::simExit();
   std::cout << "==End==" << std::endl;
 }
 
