@@ -60,6 +60,7 @@ r0 - возвращаемое значение
   Val = add i64 RegToInc, 1
   Cond = icmp eq i64 Val, ImmToCmp
   br i1 Cond, Label1, Label2
+*Нужно дополнительно записать в RegToInc*
 
 [loadDotField]: (Val) (gep + load) (StructPtr) (ImmOff)
   Addr = getelementptr inbounds %Dot, %Dot* StructPtr, i64 0, i32 ImmOff

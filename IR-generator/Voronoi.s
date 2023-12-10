@@ -88,6 +88,7 @@ ENTRY:
   li 0 -> t2
   br BB2
 BB1:
+  mv t0 -> r0
   ret 
 BB2:
   getDotAddr a2, t2 -> t3

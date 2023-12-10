@@ -40,7 +40,7 @@ void dumpParsed(assembler::Code &Code) {
 void execute(translator::IRToExecute IRWithEnv) {
   std::cout << "==Executing code==" << std::endl;
   IRWithEnv.IR.M->print(outs(), nullptr);
-  
+
   std::cout << "==Running==" << std::endl;
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter();

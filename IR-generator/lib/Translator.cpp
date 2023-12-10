@@ -692,6 +692,48 @@ protected:
   llvm::StructType *RGB_t = nullptr;
 
 private:
+  llvm::Value *generateRegID(Register &Reg, const std::string &FuncName) {
+    if (Reg.getClass() == 'r') {
+      auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    if (Reg.getClass() == 'a') {
+      auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    if (Reg.getClass() == 't') {
+      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
+      auto RegFileOffset = FuncToRegFileMap[FuncName];
+      auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
+                                         RegFileOffset + Reg.getNumber());
+      return IB->CreateLoad(IB->getInt64Ty(), Gep);
+    }
+    utils::reportFatalError("Unknown reg class");
+    return nullptr;
+  }
+
+  void generateStoreToReg(Register Reg, llvm::Value *Val, const std::string &FuncName) {
+    if (Reg.getClass() == 'r') {
+      auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
+      IB->CreateStore(Val, Gep);
+      return;
+    }
+    if (Reg.getClass() == 'a') {
+      auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
+      IB->CreateStore(Val, Gep);
+      return;
+    }
+    if (Reg.getClass() == 't') {
+      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
+      auto RegFileOffset = FuncToRegFileMap[FuncName];
+      auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
+                                         RegFileOffset + Reg.getNumber());
+      IB->CreateStore(Val, Gep);
+      return;
+    }
+    utils::reportFatalError("Unknown reg class");
+  }
+
   void generateRet(Instruction &I, InstructionEnv &Env) {
     IB->CreateRetVoid();
   }
@@ -700,7 +742,7 @@ private:
     auto *Const1i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 1);
 
     auto Reg = std::get<Register>(I.getArg(0));
-    auto *RegToInc = generateRegVal(Reg, Env.FuncName);
+    auto *RegToInc = generateRegID(Reg, Env.FuncName);
     auto ImmToCmpVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmToCmp = llvm::ConstantInt::get(IB->getInt64Ty(), ImmToCmpVal);
     auto Label1Name = std::get<Label>(I.getArg(2));
@@ -711,6 +753,7 @@ private:
     auto *Label2 = Env.BBMap[Label2Name];
 
     auto *Val = IB->CreateAdd(RegToInc, Const1i64);
+    generateStoreToReg(Reg, Val, Env.FuncName);
     auto *Cond = IB->CreateICmpEQ(Val, ImmToCmp);
 
     IB->CreateCondBr(Cond, Label1, Label2);
@@ -720,11 +763,11 @@ private:
     auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
 
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtrI64 = generateRegVal(StructPtrReg, Env.FuncName);
+    auto *StructPtrI64 = generateRegID(StructPtrReg, Env.FuncName);
     auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmOff = llvm::ConstantInt::get(IB->getInt32Ty(), ImmOffVal);
     auto RegToCmp = std::get<Register>(I.getArg(2));
-    auto *ValCmpWith = generateRegVal(RegToCmp, Env.FuncName);
+    auto *ValCmpWith = generateRegID(RegToCmp, Env.FuncName);
     auto Label1Name = std::get<Label>(I.getArg(3));
     assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
     auto *Label1 = Env.BBMap[Label1Name];
@@ -744,7 +787,7 @@ private:
   void generateBrCond(Instruction &I, InstructionEnv &Env) {
     
     auto CondReg = std::get<Register>(I.getArg(0));
-    auto *Cond = generateRegVal(CondReg, Env.FuncName);
+    auto *Cond = generateRegID(CondReg, Env.FuncName);
     auto Label1Name = std::get<Label>(I.getArg(1));
     assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
     auto *Label1 = Env.BBMap[Label1Name];
@@ -831,26 +874,6 @@ private:
   }
 
 protected:
-  llvm::Value *generateRegVal(Register &Reg, const std::string &FuncName) {
-    if (Reg.getClass() == 'r') {
-      auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
-      return IB->CreateLoad(IB->getInt64Ty(), Gep);
-    }
-    if (Reg.getClass() == 'a') {
-      auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
-      return IB->CreateLoad(IB->getInt64Ty(), Gep);
-    }
-    if (Reg.getClass() == 't') {
-      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
-      auto RegFileOffset = FuncToRegFileMap[FuncName];
-      auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
-                                         RegFileOffset + Reg.getNumber());
-      return IB->CreateLoad(IB->getInt64Ty(), Gep);
-    }
-    utils::reportFatalError("Unknown reg class");
-    return nullptr;
-  }
-
   virtual void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) = 0;
   virtual void initSubTypes() = 0;
 
@@ -889,19 +912,14 @@ class PseudoGenerator final : public ControlFlowGenerator {
     return Seed; 
   }
 
-  // Registers have classes, so this function makes general numeration for them
-  size_t getRegisterNumber(Register Reg) {
-    return Reg.getClass() * RegFileStep + Reg.getNumber();
-  }
-
   void generateLoadDotFiled(Instruction &I, InstructionEnv Env) {
     auto Func = M->getOrInsertFunction("do_loadDotField", Func3Args_t);
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto *StructPtr = IB->getInt64(getRegisterID(StructPtrReg, Env.FuncName));
     auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmOff = IB->getInt64(ImmOffVal);
     auto Args = std::vector<llvm::Value *>{Val, StructPtr, ImmOff};
@@ -913,11 +931,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
     auto Func = M->getOrInsertFunction("do_storeDotField", Func3Args_t);
 
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto *StructPtr = IB->getInt64(getRegisterID(StructPtrReg, Env.FuncName));
     auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmOff = IB->getInt64(ImmOffVal);
     auto ValToStoreReg = std::get<Register>(I.getArg(2));
-    auto *ValToStore = IB->getInt64(getRegisterNumber(ValToStoreReg));
+    auto *ValToStore = IB->getInt64(getRegisterID(ValToStoreReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{StructPtr, ImmOff, ValToStore};
 
     IB->CreateCall(Func, Args);
@@ -927,7 +945,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
     auto Func = M->getOrInsertFunction("do_storeDotFieldImm", Func3Args_t);
 
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto *StructPtr = IB->getInt64(getRegisterID(StructPtrReg, Env.FuncName));
     auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmOff = IB->getInt64(ImmOffVal);
     auto ImmToStoreVal = std::get<Immidiate>(I.getArg(2));
@@ -942,11 +960,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto AddrReg = *I.getReturnValue();
-    auto *Addr = IB->getInt64(getRegisterNumber(AddrReg));
+    auto *Addr = IB->getInt64(getRegisterID(AddrReg, Env.FuncName));
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto *StructPtr = IB->getInt64(getRegisterID(StructPtrReg, Env.FuncName));
     auto ValOffReg = std::get<Register>(I.getArg(1));
-    auto *ValOff = IB->getInt64(getRegisterNumber(ValOffReg));
+    auto *ValOff = IB->getInt64(getRegisterID(ValOffReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Addr, StructPtr, ValOff};
 
     IB->CreateCall(Func, Args);
@@ -956,7 +974,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
     auto Func = M->getOrInsertFunction("do_initRgb", Func2Args_t);
 
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto *StructPtr = IB->getInt64(getRegisterID(StructPtrReg, Env.FuncName));
     auto GVName = std::get<Label>(I.getArg(1));
     assert(GVMap.find(GVName) != GVMap.end());
     auto *Seed = GVMap[GVName];
@@ -970,9 +988,9 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = IB->getInt64(getRegisterNumber(StructPtrReg));
+    auto *StructPtr = IB->getInt64(getRegisterID(StructPtrReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, StructPtr};
 
     IB->CreateCall(Func, Args);
@@ -983,13 +1001,13 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValCmpWithReg = std::get<Register>(I.getArg(0));
-    auto *ValCmpWith = IB->getInt64(getRegisterNumber(ValCmpWithReg));
+    auto *ValCmpWith = IB->getInt64(getRegisterID(ValCmpWithReg, Env.FuncName));
     auto Val1Reg = std::get<Register>(I.getArg(1));
-    auto *Val1 = IB->getInt64(getRegisterNumber(Val1Reg));
+    auto *Val1 = IB->getInt64(getRegisterID(Val1Reg, Env.FuncName));
     auto Val2Reg = std::get<Register>(I.getArg(2));
-    auto *Val2 = IB->getInt64(getRegisterNumber(Val2Reg));
+    auto *Val2 = IB->getInt64(getRegisterID(Val2Reg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, ValCmpWith, Val1, Val2};
 
     IB->CreateCall(Func, Args);
@@ -1000,11 +1018,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto NormReg = *I.getReturnValue();
-    auto *Norm = IB->getInt64(getRegisterNumber(NormReg));
+    auto *Norm = IB->getInt64(getRegisterID(NormReg, Env.FuncName));
     auto X1Reg = std::get<Register>(I.getArg(0));
-    auto *X1 = IB->getInt64(getRegisterNumber(X1Reg));
+    auto *X1 = IB->getInt64(getRegisterID(X1Reg, Env.FuncName));
     auto X2Reg = std::get<Register>(I.getArg(1));
-    auto *X2 = IB->getInt64(getRegisterNumber(X2Reg));
+    auto *X2 = IB->getInt64(getRegisterID(X2Reg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Norm, X1, X2};
 
     IB->CreateCall(Func, Args);
@@ -1015,7 +1033,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto GVName = std::get<Label>(I.getArg(0));
     assert(GVMap.find(GVName) != GVMap.end());
     auto *Seed = GVMap[GVName];
@@ -1029,7 +1047,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto PtrReg = *I.getReturnValue();
-    auto *Ptr = IB->getInt64(getRegisterNumber(PtrReg));
+    auto *Ptr = IB->getInt64(getRegisterID(PtrReg, Env.FuncName));
     auto ImmSizeVal = std::get<Immidiate>(I.getArg(0));
     auto *ImmSize = IB->getInt64(ImmSizeVal);
     auto Args = std::vector<llvm::Value *>{Ptr, ImmSize};
@@ -1042,9 +1060,9 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValInReg = std::get<Register>(I.getArg(0));
-    auto *ValIn = IB->getInt64(getRegisterNumber(ValInReg));
+    auto *ValIn = IB->getInt64(getRegisterID(ValInReg, Env.FuncName));
     auto ImmVal = std::get<Immidiate>(I.getArg(1));
     auto *Imm = IB->getInt64(ImmVal);
     auto Args = std::vector<llvm::Value *>{Val, ValIn, Imm};
@@ -1057,9 +1075,9 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValInReg = std::get<Register>(I.getArg(0));
-    auto *ValIn = IB->getInt64(getRegisterNumber(ValInReg));
+    auto *ValIn = IB->getInt64(getRegisterID(ValInReg, Env.FuncName));
     auto ImmVal = std::get<Immidiate>(I.getArg(1));
     auto *Imm = IB->getInt64(ImmVal);
     auto Args = std::vector<llvm::Value *>{Val, ValIn, Imm};
@@ -1072,9 +1090,9 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValInReg = std::get<Register>(I.getArg(0));
-    auto *ValIn = IB->getInt64(getRegisterNumber(ValInReg));
+    auto *ValIn = IB->getInt64(getRegisterID(ValInReg, Env.FuncName));
     auto ImmVal = std::get<Immidiate>(I.getArg(1));
     auto *Imm = IB->getInt64(ImmVal);
     auto Args = std::vector<llvm::Value *>{Val, ValIn, Imm};
@@ -1087,11 +1105,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValLhsReg = std::get<Register>(I.getArg(0));
-    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto *ValLhs = IB->getInt64(getRegisterID(ValLhsReg, Env.FuncName));
     auto ValRhsReg = std::get<Register>(I.getArg(1));
-    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto *ValRhs = IB->getInt64(getRegisterID(ValRhsReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
 
     IB->CreateCall(Func, Args);
@@ -1102,7 +1120,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ImmVal = std::get<Immidiate>(I.getArg(0));
     auto *Imm = IB->getInt64(ImmVal);
     auto Args = std::vector<llvm::Value *>{Val, Imm};
@@ -1115,11 +1133,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValLhsReg = std::get<Register>(I.getArg(0));
-    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto *ValLhs = IB->getInt64(getRegisterID(ValLhsReg, Env.FuncName));
     auto ValRhsReg = std::get<Register>(I.getArg(1));
-    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto *ValRhs = IB->getInt64(getRegisterID(ValRhsReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
 
     IB->CreateCall(Func, Args);
@@ -1130,11 +1148,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValLhsReg = std::get<Register>(I.getArg(0));
-    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto *ValLhs = IB->getInt64(getRegisterID(ValLhsReg, Env.FuncName));
     auto ValRhsReg = std::get<Register>(I.getArg(1));
-    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto *ValRhs = IB->getInt64(getRegisterID(ValRhsReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
 
     IB->CreateCall(Func, Args);
@@ -1145,11 +1163,11 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto ValLhsReg = std::get<Register>(I.getArg(0));
-    auto *ValLhs = IB->getInt64(getRegisterNumber(ValLhsReg));
+    auto *ValLhs = IB->getInt64(getRegisterID(ValLhsReg, Env.FuncName));
     auto ValRhsReg = std::get<Register>(I.getArg(1));
-    auto *ValRhs = IB->getInt64(getRegisterNumber(ValRhsReg));
+    auto *ValRhs = IB->getInt64(getRegisterID(ValRhsReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, ValLhs, ValRhs};
 
     IB->CreateCall(Func, Args);
@@ -1160,13 +1178,13 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto CondReg = std::get<Register>(I.getArg(0));
-    auto *Cond = IB->getInt64(getRegisterNumber(CondReg));
+    auto *Cond = IB->getInt64(getRegisterID(CondReg, Env.FuncName));
     auto ValIn1Reg = std::get<Register>(I.getArg(1));
-    auto *ValIn1 = IB->getInt64(getRegisterNumber(ValIn1Reg));
+    auto *ValIn1 = IB->getInt64(getRegisterID(ValIn1Reg, Env.FuncName));
     auto ValIn2Reg = std::get<Register>(I.getArg(2));
-    auto *ValIn2 = IB->getInt64(getRegisterNumber(ValIn2Reg));
+    auto *ValIn2 = IB->getInt64(getRegisterID(ValIn2Reg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, Cond, ValIn1, ValIn2};
 
     IB->CreateCall(Func, Args);
@@ -1177,9 +1195,9 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
-    auto *Val = IB->getInt64(getRegisterNumber(ValReg));
+    auto *Val = IB->getInt64(getRegisterID(ValReg, Env.FuncName));
     auto RegReg = std::get<Register>(I.getArg(0));
-    auto *Reg = IB->getInt64(getRegisterNumber(RegReg));
+    auto *Reg = IB->getInt64(getRegisterID(RegReg, Env.FuncName));
     auto Args = std::vector<llvm::Value *>{Val, Reg};
 
     IB->CreateCall(Func, Args);
@@ -1293,31 +1311,54 @@ class PseudoGenerator final : public ControlFlowGenerator {
   static uint64_t *__ArgsRegFilePtr;
   static uint64_t *__RetValuePtr;
 
-  static uint64_t &getRegVal(uint64_t RegID) {
-    auto RegClass = RegID / RegFileStep;
-    auto RegNum = RegID % RegFileStep;
+  // Registers have classes, so this function makes general numeration for them
+  size_t getRegisterID(Register Reg, const std::string &FuncName) {
+    constexpr auto RetVaLRegFileBegin = 0ul;
+    constexpr auto ArgsRegFileBegin = 1ul;
+    constexpr auto TmpRegFileBegin = ArgsRegFileBegin + ArgsRegFileSize;
+    auto BaseOffset = 0ull;
 
-    switch (RegClass) {
-    case 't':
-      assert(RegNum < TmpRegFileSize);
-      return __TmpRegFilePtr[RegNum];
-    case 'a':
-      assert(RegNum < ArgsRegFileSize);
-      return __ArgsRegFilePtr[RegNum];
+    // Registers:
+    // r | a0, a1, a2, a3 | t0 ... t11 ; t0 .. t11 (another functions)
+
+    switch (Reg.getClass()) {
     case 'r':
-      assert(RegNum == 0);
-      return __RetValuePtr[0];
+      BaseOffset = RetVaLRegFileBegin;
+      break;
+    case 'a':
+      BaseOffset = ArgsRegFileBegin;
+      break;
+    case 't':
+      assert(FuncToRegFileMap.find(FuncName) != FuncToRegFileMap.end());
+      BaseOffset = TmpRegFileBegin + FuncToRegFileMap[FuncName];
+      break;
+    default:
+      utils::reportFatalError("Unknown register class: " + 
+                              std::string{Reg.getClass()});
     };
-    auto RegClassSymbol = static_cast<char>(RegClass);
-    utils::reportFatalError("Unknown register class: {" + std::string{RegClassSymbol} + "}");
-    return *__RetValuePtr;
+    return BaseOffset + Reg.getNumber();
+  }
+
+  static uint64_t &getRegVal(uint64_t RegID) {
+    constexpr auto RetVaLRegFileBegin = 0ul;
+    constexpr auto ArgsRegFileBegin = 1ul;
+    constexpr auto TmpRegFileBegin = ArgsRegFileBegin + ArgsRegFileSize;
+
+    if (RegID >= RetVaLRegFileBegin && RegID < ArgsRegFileBegin)
+      return __RetValuePtr[0];
+    if (RegID >= ArgsRegFileBegin && RegID < TmpRegFileBegin)
+      return __ArgsRegFilePtr[RegID - TmpRegFileBegin];
+    auto TmpRegFilePos = RegID - TmpRegFileBegin;
+    return __TmpRegFilePtr[TmpRegFilePos];
   }
 
   static void do_simFlush() {
+    std::cout << "\tsimFlush\n";
     lib::simFlush();
   }
 
   static void do_simPutPixel() {
+    std::cout << "\tsimPutPixel\n";
     // FIXME: this function should work with int32_t
     auto XReg = __ArgsRegFilePtr[0];
     auto YReg = __ArgsRegFilePtr[1];
@@ -1333,12 +1374,14 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
  
   static void do_loadDotField(uint64_t Val, uint64_t StructPtr, uint64_t ImmOff) {
+    std::cout << "\tloadDotField\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     getRegVal(Val) = StructPtrVal[ImmOff];
   }
 
   static void do_storeDotField(uint64_t StructPtr, uint64_t ImmOff, uint64_t ValToStore) {
+    std::cout << "\tstoreDotFiledImm\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     assert(ImmOff < 5);
@@ -1346,6 +1389,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_storeDotFieldImm(uint64_t StructPtr, uint64_t ImmOff, uint64_t ImmToStore) {
+    std::cout << "\tstoreDotFiledImm\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     assert(ImmOff < 5);
@@ -1353,6 +1397,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_getDotAddr(uint64_t Addr, uint64_t StructPtr, uint64_t VallOff) {
+    std::cout << "\tgetDotAddr\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     getRegVal(Addr) = reinterpret_cast<uint64_t>(StructPtrVal + getRegVal(VallOff));
@@ -1360,6 +1405,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
   // Seed is a pointer to global variable
   static void do_initRgb(uint64_t StructPtr, uint64_t Seed) {
+    std::cout << "\tinitRgb\n";
     assert(Seed);
     auto &SeedVal = *reinterpret_cast<uint64_t *>(Seed);
     auto *RGBPtr = reinterpret_cast<uint64_t *>(getRegVal(StructPtr)) + 5;
@@ -1373,6 +1419,8 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_loadRgb(uint64_t Val, uint64_t StructPtr) {
+    std::cout << "\tloadRgb\n";
+    assert(getRegVal(StructPtr));
     auto *RGBPtr = reinterpret_cast<uint64_t *>(getRegVal(StructPtr)) + 5;
     //auto RGB = *reinterpret_cast<lib::RGB *>(RGBPtr);
     // bitcast analogue
@@ -1380,63 +1428,77 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_cmpTwo(uint64_t Val, uint64_t ValCmpWith, uint64_t Val1, uint64_t Val2) {
+    std::cout << "\tcmpTwo\n";
     getRegVal(Val) = (getRegVal(ValCmpWith) < getRegVal(Val1)) &&
                      (getRegVal(ValCmpWith) < getRegVal(Val2));
   }
 
   static void do_norm(uint64_t Norm, uint64_t X1, uint64_t X2) {
+    std::cout << "\tnorm\n";
     getRegVal(Norm) = getRegVal(X1) * getRegVal(X1) + getRegVal(X2) * getRegVal(X2);
   }
 
   static void do_xorshift(uint64_t Val, uint64_t Seed) {
+    std::cout << "\txorshift\n";
     auto &SeedVal = *reinterpret_cast<uint64_t *>(Seed);
     SeedVal = xorshift(SeedVal);
     getRegVal(Val) = SeedVal;
   }
 
   static void do_createDots(uint64_t Ptr, uint64_t ImmSize) {
+    std::cout << "\tcreateDots\n";
     auto *DotsPtr = new Dot[ImmSize];
     getRegVal(Ptr) = reinterpret_cast<uint64_t>(DotsPtr);
   } 
 
   static void do_and(uint64_t Val, uint64_t ValIn, uint64_t Imm) {
+    std::cout << "\tand\n";
     getRegVal(Val) = getRegVal(ValIn) & Imm;
   }
 
   static void do_cmpEqImm(uint64_t Val, uint64_t ValLhs, uint64_t Imm) {
+    std::cout << "\tcmpEqImm\n";
     getRegVal(Val) = getRegVal(ValLhs) == Imm;
   }
 
   static void do_cmpUGTImm(uint64_t Val, uint64_t ValIn, uint64_t Imm) {
+    std::cout << "\tcmpUGTImm\n";
     getRegVal(Val) = getRegVal(ValIn) > Imm;
   }
 
   static void do_cmpUGT(uint64_t Val, uint64_t ValLhs, uint64_t ValRhs) {
+    std::cout << "\tcmpUGT\n";
     getRegVal(Val) = getRegVal(ValLhs) > getRegVal(ValRhs);
   }
 
   static void do_li(uint64_t Val, uint64_t Imm) {
+    std::cout << "\tli\n";
     getRegVal(Val) = Imm;
   }
 
   static void do_mul(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
+    std::cout << "\tmul\n";
     getRegVal(Val) = getRegVal(Lhs) * getRegVal(Rhs);
   }
 
   static void do_add(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
+    std::cout << "\tadd\n";
     getRegVal(Val) = getRegVal(Lhs) + getRegVal(Rhs);
   }
 
   static void do_sub(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
+    std::cout << "\tsub\n";
     getRegVal(Val) = getRegVal(Lhs) - getRegVal(Rhs);
   }
 
   static void do_select(uint64_t Val, uint64_t Cond, uint64_t ValIn1, uint64_t ValIn2) {
+    std::cout << "\tselect\n";
     // FIXME: check this cast
     getRegVal(Val) = getRegVal(Cond) % 2 ? getRegVal(ValIn1) : getRegVal(ValIn2);
   }
 
   static void do_mv(uint64_t Val, uint64_t Reg) {
+    std::cout << "\tmv\n";
     getRegVal(Val) = getRegVal(Reg);
   }
 
