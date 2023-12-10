@@ -1,5 +1,6 @@
-#include "../include/Translator.h"
-#include "../include/Assembler.h"
+#include "Translator.h"
+#include "Assembler.h"
+#include "Graphics.h"
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
@@ -541,7 +542,7 @@ protected:
   // each function has its own register file
   constexpr static auto TmpRegFileSize = 12u;
   // argument registers file is unique
-  constexpr static auto ArgsRegFileSize = 3u;
+  constexpr static auto ArgsRegFileSize = 4u;
 
   std::unique_ptr<llvm::Module> M;
   std::unique_ptr<llvm::LLVMContext> Ctx;
@@ -681,7 +682,7 @@ public:
   llvm::Function *getStartFunc() { return Start; }
 
   virtual 
-  std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() = 0;
+  std::pair<IRToExecute::Mapping_t, IRToExecute::RegisterState> generateMapper() = 0;
 };
 
 
@@ -861,15 +862,6 @@ public:
       return;
     generateDataFlowInstruction(I, Env);
   } 
-  
-  std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() override {
-    auto RegFilePtr = std::unique_ptr<uint64_t>{};
-    auto *BufPtr = RegFilePtr.get();
-    auto Mapper = [BufPtr](const std::string &FuncName) -> void * { 
-        return nullptr; 
-      };
-    return {std::move(Mapper), std::move(RegFilePtr)};
-  }
 };
 
 class PseudoGenerator final : public ControlFlowGenerator {
@@ -879,14 +871,31 @@ class PseudoGenerator final : public ControlFlowGenerator {
   llvm::FunctionType *Func3Args_t = nullptr;
   llvm::FunctionType *Func4Args_t = nullptr;
 
+  constexpr static auto RegFileStep = 32u;
+
+  struct Dot {
+    uint64_t X;
+    uint64_t Y;
+    uint64_t GrowthSpeed;
+    long long GrowthDirection;
+    uint64_t R;
+    struct lib::RGB Colour;
+  };
+  
+  static uint64_t xorshift(uint64_t Seed) {
+    Seed ^= Seed << 13;
+    Seed ^= Seed >> 7;
+    Seed ^= Seed << 17;
+    return Seed; 
+  }
+
   // Registers have classes, so this function makes general numeration for them
   size_t getRegisterNumber(Register Reg) {
-    constexpr auto RegFileStep = 32u;
     return Reg.getClass() * RegFileStep + Reg.getNumber();
   }
 
   void generateLoadDotFiled(Instruction &I, InstructionEnv Env) {
-    auto Func = M->getOrInsertFunction("do_loadDorField", Func3Args_t);
+    auto Func = M->getOrInsertFunction("do_loadDotField", Func3Args_t);
 
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
@@ -1280,16 +1289,235 @@ class PseudoGenerator final : public ControlFlowGenerator {
     Func4Args_t = llvm::FunctionType::get(Void_t, Args, /*isVarArg*/ false);
   }
 
+  static uint64_t *__TmpRegFilePtr;
+  static uint64_t *__ArgsRegFilePtr;
+  static uint64_t *__RetValuePtr;
+
+  static uint64_t &getRegVal(uint64_t RegID) {
+    auto RegClass = RegID / RegFileStep;
+    auto RegNum = RegID % RegFileStep;
+
+    switch (RegClass) {
+    case 't':
+      assert(RegNum < TmpRegFileSize);
+      return __TmpRegFilePtr[RegNum];
+    case 'a':
+      assert(RegNum < ArgsRegFileSize);
+      return __ArgsRegFilePtr[RegNum];
+    case 'r':
+      assert(RegNum == 0);
+      return __RetValuePtr[0];
+    };
+    auto RegClassSymbol = static_cast<char>(RegClass);
+    utils::reportFatalError("Unknown register class: {" + std::string{RegClassSymbol} + "}");
+    return *__RetValuePtr;
+  }
+
+  static void do_simFlush() {
+    lib::simFlush();
+  }
+
+  static void do_simPutPixel() {
+    // FIXME: this function should work with int32_t
+    auto XReg = __ArgsRegFilePtr[0];
+    auto YReg = __ArgsRegFilePtr[1];
+    auto RGBReg = __ArgsRegFilePtr[2];
+    auto Mask = 7ull;
+    auto RGB = lib::RGB{};
+    RGB.R = RGBReg & Mask;
+    Mask = Mask << 8;
+    RGB.G = RGBReg & Mask;
+    Mask = Mask << 8;
+    RGB.B = RGBReg & Mask;
+    lib::simPutPixel(XReg, YReg, RGB);
+  }
+ 
+  static void do_loadDotField(uint64_t Val, uint64_t StructPtr, uint64_t ImmOff) {
+    auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
+    assert(StructPtrVal);
+    getRegVal(Val) = StructPtrVal[ImmOff];
+  }
+
+  static void do_storeDotField(uint64_t StructPtr, uint64_t ImmOff, uint64_t ValToStore) {
+    auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
+    assert(StructPtrVal);
+    assert(ImmOff < 5);
+    StructPtrVal[ImmOff] = getRegVal(ValToStore);
+  }
+
+  static void do_storeDotFieldImm(uint64_t StructPtr, uint64_t ImmOff, uint64_t ImmToStore) {
+    auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
+    assert(StructPtrVal);
+    assert(ImmOff < 5);
+    StructPtrVal[ImmOff] = ImmToStore;
+  }
+
+  static void do_getDotAddr(uint64_t Addr, uint64_t StructPtr, uint64_t VallOff) {
+    auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
+    assert(StructPtrVal);
+    getRegVal(Addr) = reinterpret_cast<uint64_t>(StructPtrVal + getRegVal(VallOff));
+  }
+
+  // Seed is a pointer to global variable
+  static void do_initRgb(uint64_t StructPtr, uint64_t Seed) {
+    assert(Seed);
+    auto &SeedVal = *reinterpret_cast<uint64_t *>(Seed);
+    auto *RGBPtr = reinterpret_cast<uint64_t *>(getRegVal(StructPtr)) + 5;
+    auto &RGB = *reinterpret_cast<lib::RGB *>(RGBPtr);
+    SeedVal = xorshift(SeedVal);
+    RGB.R = SeedVal;
+    SeedVal = xorshift(SeedVal);
+    RGB.G = SeedVal;
+    SeedVal = xorshift(SeedVal);
+    RGB.B = SeedVal;
+  }
+
+  static void do_loadRgb(uint64_t Val, uint64_t StructPtr) {
+    auto *RGBPtr = reinterpret_cast<uint64_t *>(getRegVal(StructPtr)) + 5;
+    //auto RGB = *reinterpret_cast<lib::RGB *>(RGBPtr);
+    // bitcast analogue
+    getRegVal(Val) = (*RGBPtr) % (1 << 24);
+  }
+
+  static void do_cmpTwo(uint64_t Val, uint64_t ValCmpWith, uint64_t Val1, uint64_t Val2) {
+    getRegVal(Val) = (getRegVal(ValCmpWith) < getRegVal(Val1)) &&
+                     (getRegVal(ValCmpWith) < getRegVal(Val2));
+  }
+
+  static void do_norm(uint64_t Norm, uint64_t X1, uint64_t X2) {
+    getRegVal(Norm) = getRegVal(X1) * getRegVal(X1) + getRegVal(X2) * getRegVal(X2);
+  }
+
+  static void do_xorshift(uint64_t Val, uint64_t Seed) {
+    auto &SeedVal = *reinterpret_cast<uint64_t *>(Seed);
+    SeedVal = xorshift(SeedVal);
+    getRegVal(Val) = SeedVal;
+  }
+
+  static void do_createDots(uint64_t Ptr, uint64_t ImmSize) {
+    auto *DotsPtr = new Dot[ImmSize];
+    getRegVal(Ptr) = reinterpret_cast<uint64_t>(DotsPtr);
+  } 
+
+  static void do_and(uint64_t Val, uint64_t ValIn, uint64_t Imm) {
+    getRegVal(Val) = getRegVal(ValIn) & Imm;
+  }
+
+  static void do_cmpEqImm(uint64_t Val, uint64_t ValLhs, uint64_t Imm) {
+    getRegVal(Val) = getRegVal(ValLhs) == Imm;
+  }
+
+  static void do_cmpUGTImm(uint64_t Val, uint64_t ValIn, uint64_t Imm) {
+    getRegVal(Val) = getRegVal(ValIn) > Imm;
+  }
+
+  static void do_cmpUGT(uint64_t Val, uint64_t ValLhs, uint64_t ValRhs) {
+    getRegVal(Val) = getRegVal(ValLhs) > getRegVal(ValRhs);
+  }
+
+  static void do_li(uint64_t Val, uint64_t Imm) {
+    getRegVal(Val) = Imm;
+  }
+
+  static void do_mul(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
+    getRegVal(Val) = getRegVal(Lhs) * getRegVal(Rhs);
+  }
+
+  static void do_add(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
+    getRegVal(Val) = getRegVal(Lhs) + getRegVal(Rhs);
+  }
+
+  static void do_sub(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
+    getRegVal(Val) = getRegVal(Lhs) - getRegVal(Rhs);
+  }
+
+  static void do_select(uint64_t Val, uint64_t Cond, uint64_t ValIn1, uint64_t ValIn2) {
+    // FIXME: check this cast
+    getRegVal(Val) = getRegVal(Cond) % 2 ? getRegVal(ValIn1) : getRegVal(ValIn2);
+  }
+
+  static void do_mv(uint64_t Val, uint64_t Reg) {
+    getRegVal(Val) = getRegVal(Reg);
+  }
+
 public:
-  std::pair<IRToExecute::Mapping_t, IRToExecute::RegFile_t> generateMapper() override {
-    auto RegFilePtr = std::unique_ptr<uint64_t>{};
-    auto *BufPtr = RegFilePtr.get();
-    auto Mapper = [BufPtr](const std::string &FuncName) -> void * { 
+  std::pair<IRToExecute::Mapping_t, IRToExecute::RegisterState> generateMapper() override {
+    assert(FuncToRegFileMap.size());
+    auto GeneralTmpRegFileSize = FuncToRegFileMap.size() * TmpRegFileSize;
+    auto TmpRegFile = std::make_unique<uint64_t[]>(GeneralTmpRegFileSize);
+    auto ArgsRegFile = std::make_unique<uint64_t[]>(ArgsRegFileSize);
+    auto RetValue = std::make_unique<uint64_t[]>(1);
+    
+    __TmpRegFilePtr = TmpRegFile.get();
+    __ArgsRegFilePtr = ArgsRegFile.get();
+    __RetValuePtr = RetValue.get();
+    auto Mapper = 
+      [TmpRegFilePtr = __TmpRegFilePtr, 
+       ArgsRegFilePtr = __ArgsRegFilePtr, 
+       RetValuePtr = __RetValuePtr](const std::string &Name) -> void * {
+        std::cout << "Mapping {" << Name << "}\n";
+        if (Name == "tmpRegFile")
+          return TmpRegFilePtr;
+        if (Name == "argRegFile")
+          return ArgsRegFilePtr;
+        if (Name == "retValReg")
+          return RetValuePtr;
+        if (Name == "simFlush")
+          return reinterpret_cast<void *>(&do_simFlush);
+        if (Name == "simPutPixel")
+          return reinterpret_cast<void *>(&do_simPutPixel);
+        if (Name == "do_loadDotField")
+          return reinterpret_cast<void *>(&do_loadDotField);
+        if (Name == "do_storeDotField")
+          return reinterpret_cast<void *>(&do_storeDotField);
+        if (Name == "do_storeDotFieldImm")
+          return reinterpret_cast<void *>(&do_storeDotFieldImm);
+        if (Name == "do_getDotAddr")
+          return reinterpret_cast<void *>(&do_getDotAddr);
+        if (Name == "do_initRgb")
+          return reinterpret_cast<void *>(&do_initRgb);
+        if (Name == "do_loadRgb")
+          return reinterpret_cast<void *>(&do_loadRgb);
+        if (Name == "do_cmpTwo")
+          return reinterpret_cast<void *>(&do_cmpTwo);
+        if (Name == "do_norm")
+          return reinterpret_cast<void *>(&do_norm);
+        if (Name == "do_xorshift")
+          return reinterpret_cast<void *>(&do_xorshift);
+        if (Name == "do_createDots")
+          return reinterpret_cast<void *>(&do_createDots);
+        if (Name == "do_and")
+          return reinterpret_cast<void *>(&do_and);
+        if (Name == "do_cmpEqImm")
+          return reinterpret_cast<void *>(&do_cmpEqImm);
+        if (Name == "do_cmpUGTImm")
+          return reinterpret_cast<void *>(&do_cmpUGTImm);
+        if (Name == "do_cmpUGT")
+          return reinterpret_cast<void *>(&do_cmpUGT);
+        if (Name == "do_li")
+          return reinterpret_cast<void *>(&do_li);
+        if (Name == "do_mul")
+          return reinterpret_cast<void *>(&do_mul);
+        if (Name == "do_add")
+          return reinterpret_cast<void *>(&do_add);
+        if (Name == "do_sub")
+          return reinterpret_cast<void *>(&do_sub);
+        if (Name == "do_select")
+          return reinterpret_cast<void *>(&do_select);
+        if (Name == "do_mv")
+          return reinterpret_cast<void *>(&do_mv);
+        utils::reportFatalError("Unknown callback: " + Name);
         return nullptr; 
       };
-    return {std::move(Mapper), std::move(RegFilePtr)};
+    return {std::move(Mapper), IRToExecute::RegisterState{std::move(TmpRegFile), 
+                                                          std::move(ArgsRegFile),
+                                                          std::move(RetValue)}};
   }
 };
+
+uint64_t *PseudoGenerator::__TmpRegFilePtr = nullptr;
+uint64_t *PseudoGenerator::__ArgsRegFilePtr = nullptr;
+uint64_t *PseudoGenerator::__RetValuePtr = nullptr;
 
 } // namespace IR
 
@@ -1322,8 +1550,9 @@ assembler::Code parse(std::vector<Token> Program) {
 
 IRToExecute makePseudoLLVMIR(assembler::Code &Code) {
   auto Gen = IR::PseudoGenerator{};
+  auto IR = Gen.generateIR(Code);
   auto [Mapper, RegFile] = Gen.generateMapper();
-  return {Gen.generateIR(Code), std::move(Mapper), 
+  return {std::move(IR), std::move(Mapper), 
           std::move(RegFile), Gen.getStartFunc()};
 }
 

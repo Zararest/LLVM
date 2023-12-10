@@ -158,7 +158,7 @@ r0 - возвращаемое значение
   Val = Imm
 
 [mul]:(Val) (mul) (Lhs) (Rhs)
-  Val = mal Lhs, Rhs
+  Val = mul Lhs, Rhs
 
 [add]:(Val) (add) (Lhs) (Rhs)
   Val = add Lhs, Rhs

@@ -103,18 +103,24 @@ struct Token {
 };
 
 struct IRToExecute {
+  using Mapping_t = std::function<void*(const std::string &)>;
+  using RegFile_t = std::unique_ptr<uint64_t[]>;
+
   struct IR_t {
     std::unique_ptr<llvm::Module> M;
     std::unique_ptr<llvm::LLVMContext> Ctx;
   };
 
-  using Mapping_t = std::function<void*(const std::string &)>;
-  using RegFile_t = std::unique_ptr<uint64_t>;
+  struct RegisterState {
+    RegFile_t TmpRegFile;
+    RegFile_t ArgsRegFile;
+    RegFile_t RetValue;
+  };
 
   IR_t IR;
   Mapping_t FuncMapper = 
     [](const std::string &FuncName) -> void * { return nullptr; };
-  RegFile_t RegFile;
+  RegisterState RegState;
   llvm::Function *StartFunc = nullptr;
 };
 

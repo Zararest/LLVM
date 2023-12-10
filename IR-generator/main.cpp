@@ -46,6 +46,7 @@ void execute(translator::IRToExecute IRWithEnv) {
   InitializeNativeTargetAsmPrinter();
   auto *EE = EngineBuilder(std::move(IRWithEnv.IR.M)).create();
   EE->InstallLazyFunctionCreator(IRWithEnv.FuncMapper);
+  // Lazy mapper can also handle globals
   EE->finalizeObject();
 
   auto Args = std::vector<GenericValue>{};
