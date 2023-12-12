@@ -13,7 +13,7 @@ ENTRY:
   xorshift Seed -> t0
   and t0, 63 -> t0
   storeDotField a0, 0, t0
-  xorshift Seed, -> t1
+  xorshift Seed -> t1
   and t1, 63 -> t1  
   storeDotField a0, 1, t1
   initRgb a0, Seed
@@ -176,4 +176,4 @@ BB2:
   mv t0 -> a0
   call drawFrame
   call simFlush
-  incJump t1, 10, BB1, BB2 -> t1
+  incJump t1, 1, BB1, BB2 -> t1

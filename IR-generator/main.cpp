@@ -30,6 +30,10 @@ static cl::opt<bool> GeneratePseudoIR("generate-pseudo-ir",
                               cl::desc("Generates IR with external calls"),
                               cl::cat(Assembler), cl::init(false));
 
+static cl::opt<bool> GenerateRealIR("generate-real-ir",
+                              cl::desc("Generates IR without external functions"),
+                              cl::cat(Assembler), cl::init(false));
+
 void dumpParsed(assembler::Code &Code) {
   auto File = std::ofstream{DumpMyIR};
   if (!File.is_open())
@@ -90,6 +94,9 @@ int main(int Argc, char **Argv) {
   
   if (!DumpMyIR.empty())
     dumpParsed(Code);
+
+  if (GenerateRealIR)
+    execute(translator::makeLLVMIR(Code));
 
   if (GeneratePseudoIR)
     execute(translator::makePseudoLLVMIR(Code));

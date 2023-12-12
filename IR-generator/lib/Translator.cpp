@@ -723,12 +723,12 @@ protected:
   void generateStoreToReg(Register Reg, llvm::Value *Val, const std::string &FuncName) {
     if (Reg.getClass() == 'r') {
       auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
-      IB->CreateStore(Val, Gep);
+      IB->CreateAlignedStore(Val, Gep, llvm::MaybeAlign{8});
       return;
     }
     if (Reg.getClass() == 'a') {
       auto *Gep = IB->CreateConstGEP2_64(ArgRegFile_t, ArgRegFile, 0, Reg.getNumber());
-      IB->CreateStore(Val, Gep);
+      IB->CreateAlignedStore(Val, Gep, llvm::MaybeAlign{8});
       return;
     }
     if (Reg.getClass() == 't') {
@@ -736,7 +736,7 @@ protected:
       auto RegFileOffset = FuncToRegFileMap[FuncName];
       auto *Gep = IB->CreateConstGEP2_64(TmpRegFile_t, TmpRegFile, 0, 
                                          RegFileOffset + Reg.getNumber());
-      IB->CreateStore(Val, Gep);
+      IB->CreateAlignedStore(Val, Gep, llvm::MaybeAlign{8});
       return;
     }
     utils::reportFatalError("Unknown reg class");
@@ -1561,96 +1561,304 @@ uint64_t *PseudoGenerator::__ArgsRegFilePtr = nullptr;
 uint64_t *PseudoGenerator::__RetValuePtr = nullptr;
 
 class RealGenerator final : public ControlFlowGenerator {
+  static uint64_t *__TmpRegFilePtr;
+  static uint64_t *__ArgsRegFilePtr;
+  static uint64_t *__RetValuePtr;
+
+  llvm::Function *xorshiftFunc = nullptr;
+
   void generateLoadDotFiled(Instruction &I, InstructionEnv Env) {
     auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
 
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtr = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
     auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
-    auto *ImmOff = llvm::ConstantInt::get(IB->getInt64Ty(), ImmOffVal);
+    auto *ImmOff = llvm::ConstantInt::get(IB->getInt32Ty(), ImmOffVal);
     assert(I.getReturnValue());
-    auto ValReg = I.getReturnValue();
+    auto ValReg = *I.getReturnValue();
 
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
     auto Values = std::vector<llvm::Value *>{Const0i64, ImmOff};
     auto *Addr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
     auto *Val = IB->CreateAlignedLoad(IB->getInt64Ty(), Addr, llvm::MaybeAlign{8});
-    generateStoreToReg(*ValReg, Val, Env.FuncName);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateStoreDotField(Instruction &I, InstructionEnv Env) {
-    
+    auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = llvm::ConstantInt::get(IB->getInt32Ty(), ImmOffVal);
+    auto ValToStoreReg = std::get<Register>(I.getArg(2));
+    auto *ValToStore = generateRegValueLoad(ValToStoreReg, Env.FuncName);
+
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
+    auto Values = std::vector<llvm::Value *>{Const0i64, ImmOff};
+    auto *Ptr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    IB->CreateAlignedStore(ValToStore, Ptr, llvm::MaybeAlign{8});
   }
 
   void generateStoreDotFieldImm(Instruction &I, InstructionEnv Env) {
-    
+    auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = llvm::ConstantInt::get(IB->getInt32Ty(), ImmOffVal);
+    auto ImmToStoreVal = std::get<Immidiate>(I.getArg(2));
+    auto *ImmToStore = llvm::ConstantInt::get(IB->getInt64Ty(), ImmOffVal);
+
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
+    auto Values = std::vector<llvm::Value *>{Const0i64, ImmOff};
+    auto *Ptr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    IB->CreateAlignedStore(ImmToStore, Ptr, llvm::MaybeAlign{8});
   }
 
   void generateGetDotAddr(Instruction &I, InstructionEnv Env) {
-    
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    auto VallOffReg= std::get<Register>(I.getArg(1));
+    auto *ValOff =  generateRegValueLoad(VallOffReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto AddrReg = I.getReturnValue();
+
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
+    auto Values = std::vector<llvm::Value *>{ValOff};
+    auto *Ptr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    generateStoreToReg(*AddrReg, Ptr, Env.FuncName);
   }
 
   void generateInitRgb(Instruction &I, InstructionEnv Env) {
+    auto StoreAlign = llvm::MaybeAlign{8};
+    auto Const64i0 = llvm::ConstantInt::get(IB->getInt64Ty(), 0);
+    auto Const32i5 = llvm::ConstantInt::get(IB->getInt32Ty(), 5);
+    auto Const32i0 = llvm::ConstantInt::get(IB->getInt32Ty(), 0);
+    auto Const32i1 = llvm::ConstantInt::get(IB->getInt32Ty(), 1);
+    auto Const32i2 = llvm::ConstantInt::get(IB->getInt32Ty(), 2);
     
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    auto SeedReg = std::get<Register>(I.getArg(0));
+    auto *Seed = generateRegValueLoad(SeedReg, Env.FuncName);
+    auto Args = std::vector<llvm::Value *>{Seed};
+
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
+
+    auto *XorShift1 = IB->CreateCall(xorshiftFunc, Args);
+    auto *Trunc1 = IB->CreateTrunc(XorShift1, IB->getInt8Ty());
+    auto Values = std::vector<llvm::Value *>{Const64i0, Const32i5, Const32i0};
+    auto *Gep6 = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    IB->CreateAlignedStore(Trunc1, Gep6, StoreAlign);
+
+    auto *XorShift2 = IB->CreateCall(xorshiftFunc, Args);
+    auto *Trunc2 = IB->CreateTrunc(XorShift2, IB->getInt8Ty());
+    Values = std::vector<llvm::Value *>{Const64i0, Const32i5, Const32i1};
+    auto *Gep7 = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    IB->CreateAlignedStore(Trunc2, Gep7, StoreAlign);
+
+    auto *XorShift3 = IB->CreateCall(xorshiftFunc, Args);
+    auto *Trunc3 = IB->CreateTrunc(XorShift3, IB->getInt8Ty());
+    Values = std::vector<llvm::Value *>{Const64i0, Const32i5, Const32i2};
+    auto *Gep8 = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    IB->CreateAlignedStore(Trunc3, Gep8, StoreAlign);
   }
 
   void generateLoadRgb(Instruction &I, InstructionEnv Env) {
-    
+    auto Const64i0 = llvm::ConstantInt::get(IB->getInt64Ty(), 0);
+    auto Const32i5 = llvm::ConstantInt::get(IB->getInt32Ty(), 5);
+    auto Int24_t = IB->getIntNTy(24);
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
+    auto Values = std::vector<llvm::Value *>{Const64i0, Const32i5};
+    auto *Addr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    auto *Bitcast = IB->CreateBitCast(Addr, llvm::PointerType::getUnqual(Int24_t));
+    auto *Val = 
+      IB->CreateAlignedLoad(llvm::PointerType::getUnqual(Int24_t), 
+                            Bitcast, llvm::MaybeAlign{8});
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateCmpTwo(Instruction &I, InstructionEnv Env) {
-   
+    auto ValCmpWithReg = std::get<Register>(I.getArg(0));
+    auto *ValCmpWith = generateRegValueLoad(ValCmpWithReg, Env.FuncName);
+    auto Val1Reg = std::get<Register>(I.getArg(1));
+    auto *Val1 = generateRegValueLoad(Val1Reg, Env.FuncName);
+    auto Val2Reg = std::get<Register>(I.getArg(2));
+    auto *Val2 = generateRegValueLoad(Val2Reg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Icmp1 = IB->CreateICmpULT(ValCmpWith, Val1);
+    auto *Icmp2 = IB->CreateICmpULT(ValCmpWith, Val2);
+    auto *Val = IB->CreateAnd(Icmp1, Icmp2);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateNorm(Instruction &I, InstructionEnv Env) {
+    auto X1Reg = std::get<Register>(I.getArg(0));
+    auto *X1 = generateRegValueLoad(X1Reg, Env.FuncName);
+    auto X2Reg = std::get<Register>(I.getArg(1));
+    auto *X2 = generateRegValueLoad(X2Reg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto NormReg = *I.getReturnValue();
     
+
+    auto *Mul1 = IB->CreateMul(X1, X1);
+    auto *Mul2 = IB->CreateMul(X2, X2);
+    auto *Norm = IB->CreateAdd(Mul2, Mul1);
+    generateStoreToReg(NormReg, Norm, Env.FuncName);
   }
 
   void generateXorshift(Instruction &I, InstructionEnv Env) {
-    
+    auto SeedName = std::get<Label>(I.getArg(0));
+    assert(GVMap.find(SeedName) != GVMap.end());
+    auto *Seed = GVMap[SeedName];
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+    auto Args = std::vector<llvm::Value *>{Seed};
+
+    auto *Val = IB->CreateCall(xorshiftFunc, Args);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateCreateDots(Instruction &I, InstructionEnv Env) {
-    
+    auto Const64i0 = llvm::ConstantInt::get(IB->getInt64Ty(), 0);
+
+    auto ImmSizeVal = std::get<Immidiate>(I.getArg(0));
+    auto *DotsArray_t = llvm::ArrayType::get(Dot_t, ImmSizeVal);
+    assert(I.getReturnValue());
+    auto PtrReg = *I.getReturnValue();
+
+    auto *Alloca = IB->CreateAlloca(DotsArray_t);
+    auto *Bitcast = IB->CreateBitCast(Alloca, IB->getInt8PtrTy());
+
+    auto Values = std::vector<llvm::Value *>{Const64i0, Const64i0};
+    auto *Ptr = IB->CreateInBoundsGEP(DotsArray_t, Alloca, Values);
+    generateStoreToReg(PtrReg, Ptr, Env.FuncName);
   }
 
   void generateAnd(Instruction &I, InstructionEnv Env) {
-    
+    auto ValInReg = std::get<Register>(I.getArg(0));
+    auto *ValIn = generateRegValueLoad(ValInReg, Env.FuncName);
+    auto ImmVal = std::get<Immidiate>(I.getArg(1));
+    auto *Imm = llvm::ConstantInt::get(IB->getInt64Ty(), ImmVal);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateAnd(ValIn, Imm);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateCmpEqImm(Instruction &I, InstructionEnv Env) {
-    
+    auto ValInReg = std::get<Register>(I.getArg(0));
+    auto *ValIn = generateRegValueLoad(ValInReg, Env.FuncName);
+    auto ImmVal = std::get<Immidiate>(I.getArg(1));
+    auto *Imm = llvm::ConstantInt::get(IB->getInt64Ty(), ImmVal);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateICmpEQ(ValIn, Imm);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateCmpUGTImm(Instruction &I, InstructionEnv Env) {
-    
+    auto ValInReg = std::get<Register>(I.getArg(0));
+    auto *ValIn = generateRegValueLoad(ValInReg, Env.FuncName);
+    auto ImmVal = std::get<Immidiate>(I.getArg(1));
+    auto *Imm = llvm::ConstantInt::get(IB->getInt64Ty(), ImmVal);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateICmpUGT(ValIn, Imm);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateCmpUGT(Instruction &I, InstructionEnv Env) {
-    
+    auto ValLhsReg = std::get<Register>(I.getArg(0));
+    auto *ValLhs = generateRegValueLoad(ValLhsReg, Env.FuncName);
+    auto ValRhsReg = std::get<Register>(I.getArg(1));
+    auto *ValRhs = generateRegValueLoad(ValRhsReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateICmpUGT(ValLhs, ValRhs);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateLi(Instruction &I, InstructionEnv Env) {
-   
+    auto ImmVal = std::get<Immidiate>(I.getArg(0));
+    auto *Imm = llvm::ConstantInt::get(IB->getInt64Ty(), ImmVal);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    generateStoreToReg(ValReg, Imm, Env.FuncName);
   }
 
   void generateMul(Instruction &I, InstructionEnv Env) {
-    
+    auto LhsReg = std::get<Register>(I.getArg(0));
+    auto *Lhs = generateRegValueLoad(LhsReg, Env.FuncName);
+    auto RhsReg = std::get<Register>(I.getArg(1));
+    auto *Rhs = generateRegValueLoad(RhsReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateMul(Lhs, Rhs);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateAdd(Instruction &I, InstructionEnv Env) {
-    
+    auto LhsReg = std::get<Register>(I.getArg(0));
+    auto *Lhs = generateRegValueLoad(LhsReg, Env.FuncName);
+    auto RhsReg = std::get<Register>(I.getArg(1));
+    auto *Rhs = generateRegValueLoad(RhsReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateAdd(Lhs, Rhs);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateSub(Instruction &I, InstructionEnv Env) {
-  
+    auto LhsReg = std::get<Register>(I.getArg(0));
+    auto *Lhs = generateRegValueLoad(LhsReg, Env.FuncName);
+    auto RhsReg = std::get<Register>(I.getArg(1));
+    auto *Rhs = generateRegValueLoad(RhsReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    auto *Val = IB->CreateSub(Lhs, Rhs);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateSelect(Instruction &I, InstructionEnv Env) {
+    auto CondReg = std::get<Register>(I.getArg(0));
+    auto *Cond = generateRegValueLoad(CondReg, Env.FuncName);
+    auto ValIn1Reg = std::get<Register>(I.getArg(1));
+    auto *ValIn1 = generateRegValueLoad(ValIn1Reg, Env.FuncName);
+    auto ValIn2Reg = std::get<Register>(I.getArg(2));
+    auto *ValIn2 = generateRegValueLoad(ValIn2Reg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
     
+    auto *Bitcast = IB->CreateBitCast(Cond, IB->getInt1Ty());
+    auto *Val = IB->CreateSelect(Bitcast, ValIn1, ValIn2);
+    generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
   void generateMv(Instruction &I, InstructionEnv Env) {
-    
+    auto RegReg = std::get<Register>(I.getArg(0));
+    auto *Reg = generateRegValueLoad(RegReg, Env.FuncName);
+    assert(I.getReturnValue());
+    auto ValReg = *I.getReturnValue();
+
+    generateStoreToReg(ValReg, Reg, Env.FuncName);
   }
 
   void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) override {
@@ -1737,7 +1945,95 @@ class RealGenerator final : public ControlFlowGenerator {
     }
     utils::reportFatalError("Unknown instruction:");
   }
+
+  static void do_simFlush() {
+    lib::simFlush();
+  }
+
+  static void do_simPutPixel() {
+    auto XReg = __ArgsRegFilePtr[0];
+    auto YReg = __ArgsRegFilePtr[1];
+    auto RGBReg = __ArgsRegFilePtr[2];
+    auto RGB = lib::RGB{};
+    auto Bytes = utils::bit_cast<std::array<uint8_t, sizeof(RGBReg)>>(RGBReg);
+    RGB.R = Bytes[0];
+    RGB.G = Bytes[1];
+    RGB.B = Bytes[2];
+    lib::simPutPixel(XReg, YReg, RGB);
+  }
+
+  llvm::Function *generateXorShiftFunction() {
+    auto *xorshift_t = 
+      llvm::FunctionType::get(IB->getInt64Ty(), 
+                              llvm::PointerType::getUnqual(IB->getInt64Ty()),
+                             /*isVarArg*/ false);
+    auto *xorshift =
+      llvm::Function::Create(xorshift_t, llvm::Function::ExternalLinkage, "xorshift", *M);
+    auto *BB = llvm::BasicBlock::Create(*Ctx, "Entry", xorshift);
+    IB->SetInsertPoint(BB);
+
+    auto SeedAlign = llvm::MaybeAlign{8};
+    auto *Const13 = llvm::ConstantInt::get(IB->getInt64Ty(), 13);
+    auto *Const7 = llvm::ConstantInt::get(IB->getInt64Ty(), 7);
+    auto *Const17 = llvm::ConstantInt::get(IB->getInt64Ty(), 17);
+    auto *Seed = xorshift->getArg(0);
+
+    auto *LoadInstr = 
+      IB->CreateAlignedLoad(IB->getInt64Ty(), Seed, SeedAlign, /*isVolatile*/ false);
+    auto *Shl1 = IB->CreateShl(LoadInstr, Const13);
+    auto *Xor1 = IB->CreateXor(Shl1, LoadInstr);
+    auto *Lshr = IB->CreateLShr(Xor1, Const7);
+    auto *Xor2 = IB->CreateXor(Lshr, Xor1);
+    auto *Shl2 = IB->CreateShl(Xor2, Const17);
+    auto *Xor3 = IB->CreateXor(Shl2, Xor2);
+    IB->CreateAlignedStore(Xor3, Seed, SeedAlign);
+
+    IB->CreateRet(Xor3);
+    return xorshift;
+  }
+
+  void initSubTypes() override {
+    xorshiftFunc = generateXorShiftFunction();
+  }
+
+public:
+  std::pair<IRToExecute::Mapping_t, IRToExecute::RegisterState> generateMapper() override {
+    assert(FuncToRegFileMap.size());
+    auto GeneralTmpRegFileSize = FuncToRegFileMap.size() * TmpRegFileSize;
+    auto ArgsRegFile = std::make_unique<uint64_t[]>(ArgsRegFileSize);
+    auto RetValue = std::make_unique<uint64_t[]>(1);
+    auto TmpRegFile = std::make_unique<uint64_t[]>(TmpRegFileSize);
+    
+    __TmpRegFilePtr = TmpRegFile.get();
+    __ArgsRegFilePtr = ArgsRegFile.get();
+    __RetValuePtr = RetValue.get();
+    auto Mapper = 
+      [TmpRegFile = __TmpRegFilePtr,
+       ArgsRegFilePtr = __ArgsRegFilePtr, 
+       RetValuePtr = __RetValuePtr](const std::string &Name) -> void * {
+        std::cout << "Mapping {" << Name << "}\n";
+        if (Name == "argRegFile")
+          return ArgsRegFilePtr;
+        if (Name == "tmpRegFile")
+          return TmpRegFile;
+        if (Name == "retValReg")
+          return RetValuePtr;
+        if (Name == "simFlush")
+          return reinterpret_cast<void *>(&do_simFlush);
+        if (Name == "simPutPixel")
+          return reinterpret_cast<void *>(&do_simPutPixel);
+        utils::reportFatalError("Unknown callback: " + Name);
+        return nullptr; 
+      };
+    return {std::move(Mapper), IRToExecute::RegisterState{std::move(TmpRegFile), 
+                                                          std::move(ArgsRegFile),
+                                                          std::move(RetValue)}};
+  }
 };
+
+uint64_t *RealGenerator::__TmpRegFilePtr = nullptr;
+uint64_t *RealGenerator::__ArgsRegFilePtr = nullptr;
+uint64_t *RealGenerator::__RetValuePtr = nullptr;
 
 } // namespace IR
 
@@ -1770,6 +2066,14 @@ assembler::Code parse(std::vector<Token> Program) {
 
 IRToExecute makePseudoLLVMIR(assembler::Code &Code) {
   auto Gen = IR::PseudoGenerator{};
+  auto IR = Gen.generateIR(Code);
+  auto [Mapper, RegFile] = Gen.generateMapper();
+  return {std::move(IR), std::move(Mapper), 
+          std::move(RegFile), Gen.getStartFunc()};
+}
+
+IRToExecute makeLLVMIR(assembler::Code &Code) {
+  auto Gen = IR::RealGenerator{};
   auto IR = Gen.generateIR(Code);
   auto [Mapper, RegFile] = Gen.generateMapper();
   return {std::move(IR), std::move(Mapper), 
