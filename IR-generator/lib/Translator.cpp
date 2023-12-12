@@ -1354,13 +1354,10 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_simFlush() {
-    //std::cout << "\tsimFlush\n";
     lib::simFlush();
   }
 
   static void do_simPutPixel() {
-    //std::cout << "\tsimPutPixel\n";
-    // FIXME: this function should work with int32_t
     auto XReg = __ArgsRegFilePtr[0];
     auto YReg = __ArgsRegFilePtr[1];
     auto RGBReg = __ArgsRegFilePtr[2];
@@ -1373,7 +1370,6 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
  
   static void do_loadDotField(uint64_t Val, uint64_t StructPtr, uint64_t ImmOff) {
-    //std::cout << "\tloadDotField\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     assert(ImmOff < 5);
@@ -1381,7 +1377,6 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_storeDotField(uint64_t StructPtr, uint64_t ImmOff, uint64_t ValToStore) {
-    //std::cout << "\tstoreDotFiledImm\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     assert(ImmOff < 5);
@@ -1389,7 +1384,6 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_storeDotFieldImm(uint64_t StructPtr, uint64_t ImmOff, uint64_t ImmToStore) {
-    //std::cout << "\tstoreDotFiledImm\n";
     auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     assert(ImmOff < 5);
@@ -1399,8 +1393,6 @@ class PseudoGenerator final : public ControlFlowGenerator {
   static void do_getDotAddr(uint64_t Addr, uint64_t StructPtr, uint64_t VallOff) {
     static int Count = 0;
     Count++;
-    //std::cout << "\tgetDotAddr " << Count << std::endl;
-    //std::cout << "\t\tcounter: " << getRegVal(VallOff) << "\n\n";
     auto *StructPtrVal = reinterpret_cast<Dot *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     getRegVal(Addr) = reinterpret_cast<uint64_t>(StructPtrVal + getRegVal(VallOff));
@@ -1408,7 +1400,6 @@ class PseudoGenerator final : public ControlFlowGenerator {
 
   // Seed is a pointer to global variable
   static void do_initRgb(uint64_t StructPtr, uint64_t Seed) {
-    //std::cout << "\tinitRgb\n";
     assert(Seed);
     auto &SeedVal = *reinterpret_cast<uint64_t *>(Seed);
     auto *DotPtr = reinterpret_cast<Dot *>(getRegVal(StructPtr));
@@ -1422,87 +1413,71 @@ class PseudoGenerator final : public ControlFlowGenerator {
   }
 
   static void do_loadRgb(uint64_t Val, uint64_t StructPtr) {
-    //std::cout << "\tloadRgb\n";
     assert(getRegVal(StructPtr));
     auto *DotPtr = reinterpret_cast<Dot *>(getRegVal(StructPtr));
     auto RGB = DotPtr->Colour;
     // bitcast analogue
     getRegVal(Val) = RGB.R + (RGB.G << 8) + (RGB.B << 16);
-    //std::cout << "\tRGB: " << getRegVal(Val) << std::endl;
   }
 
   static void do_cmpTwo(uint64_t Val, uint64_t ValCmpWith, uint64_t Val1, uint64_t Val2) {
-    //std::cout << "\tcmpTwo\n";
     getRegVal(Val) = (getRegVal(ValCmpWith) < getRegVal(Val1)) &&
                      (getRegVal(ValCmpWith) < getRegVal(Val2));
   }
 
   static void do_norm(uint64_t Norm, uint64_t X1, uint64_t X2) {
-    //std::cout << "\tnorm\n";
     getRegVal(Norm) = getRegVal(X1) * getRegVal(X1) + getRegVal(X2) * getRegVal(X2);
   }
 
   static void do_xorshift(uint64_t Val, uint64_t Seed) {
-    //std::cout << "\txorshift\n";
     auto &SeedVal = *reinterpret_cast<uint64_t *>(Seed);
     SeedVal = xorshift(SeedVal);
     getRegVal(Val) = SeedVal;
   }
 
   static void do_createDots(uint64_t Ptr, uint64_t ImmSize) {
-    //std::cout << "\tcreateDots\n";
     auto *DotsPtr = new Dot[ImmSize];
     getRegVal(Ptr) = reinterpret_cast<uint64_t>(DotsPtr);
   } 
 
   static void do_and(uint64_t Val, uint64_t ValIn, uint64_t Imm) {
-    //std::cout << "\tand\n";
     getRegVal(Val) = getRegVal(ValIn) & Imm;
   }
 
   static void do_cmpEqImm(uint64_t Val, uint64_t ValLhs, uint64_t Imm) {
-    //std::cout << "\tcmpEqImm\n";
     getRegVal(Val) = getRegVal(ValLhs) == Imm;
   }
 
   static void do_cmpUGTImm(uint64_t Val, uint64_t ValIn, uint64_t Imm) {
-    //std::cout << "\tcmpUGTImm\n";
     getRegVal(Val) = getRegVal(ValIn) > Imm;
   }
 
   static void do_cmpUGT(uint64_t Val, uint64_t ValLhs, uint64_t ValRhs) {
-    //std::cout << "\tcmpUGT\n";
     getRegVal(Val) = getRegVal(ValLhs) > getRegVal(ValRhs);
   }
 
   static void do_li(uint64_t Val, uint64_t Imm) {
-    //std::cout << "\tli\n";
     getRegVal(Val) = Imm;
   }
 
-  static void do_mul(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
-    //std::cout << "\tmul\n";
+  static void do_mul(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {;
     getRegVal(Val) = getRegVal(Lhs) * getRegVal(Rhs);
   }
 
   static void do_add(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
-    //std::cout << "\tadd\n";
     getRegVal(Val) = getRegVal(Lhs) + getRegVal(Rhs);
   }
 
   static void do_sub(uint64_t Val, uint64_t Lhs, uint64_t Rhs) {
-    //std::cout << "\tsub\n";
     getRegVal(Val) = getRegVal(Lhs) - getRegVal(Rhs);
   }
 
   static void do_select(uint64_t Val, uint64_t Cond, uint64_t ValIn1, uint64_t ValIn2) {
-    //std::cout << "\tselect\n";
     // FIXME: check this cast
     getRegVal(Val) = getRegVal(Cond) % 2 ? getRegVal(ValIn1) : getRegVal(ValIn2);
   }
 
   static void do_mv(uint64_t Val, uint64_t Reg) {
-    //std::cout << "\tmv\n";
     getRegVal(Val) = getRegVal(Reg);
   }
 
