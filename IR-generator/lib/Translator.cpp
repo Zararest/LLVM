@@ -526,6 +526,15 @@ namespace IR {
 
 using namespace assembler;
 
+struct Dot {
+  uint64_t X;
+  uint64_t Y;
+  uint64_t GrowthSpeed;
+  long long GrowthDirection;
+  uint64_t R;
+  struct lib::RGB Colour;
+};
+
 class Generator {
 protected:
   using BBMap_t = std::unordered_map<std::string, llvm::BasicBlock *>;
@@ -686,14 +695,12 @@ public:
   std::pair<IRToExecute::Mapping_t, IRToExecute::RegisterState> generateMapper() = 0;
 };
 
-
 class ControlFlowGenerator : public Generator {  
 protected:
   llvm::StructType *Dot_t = nullptr;
   llvm::StructType *RGB_t = nullptr;
 
-private:
-  llvm::Value *generateRegID(Register &Reg, const std::string &FuncName) {
+  llvm::Value *generateRegValueLoad(Register &Reg, const std::string &FuncName) {
     if (Reg.getClass() == 'r') {
       auto *Gep = IB->CreateConstGEP2_64(RetValReg_t, RetValReg, 0, Reg.getNumber());
       return IB->CreateLoad(IB->getInt64Ty(), Gep);
@@ -735,6 +742,7 @@ private:
     utils::reportFatalError("Unknown reg class");
   }
 
+private:
   void generateRet(Instruction &I, InstructionEnv &Env) {
     IB->CreateRetVoid();
   }
@@ -743,7 +751,7 @@ private:
     auto *Const1i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 1);
 
     auto Reg = std::get<Register>(I.getArg(0));
-    auto *RegToInc = generateRegID(Reg, Env.FuncName);
+    auto *RegToInc = generateRegValueLoad(Reg, Env.FuncName);
     auto ImmToCmpVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmToCmp = llvm::ConstantInt::get(IB->getInt64Ty(), ImmToCmpVal);
     auto Label1Name = std::get<Label>(I.getArg(2));
@@ -752,9 +760,11 @@ private:
     auto Label2Name = std::get<Label>(I.getArg(3));
     assert(Env.BBMap.find(Label2Name) != Env.BBMap.end());
     auto *Label2 = Env.BBMap[Label2Name];
+    assert(I.getReturnValue());
+    auto RegToStore = I.getReturnValue();
 
     auto *Val = IB->CreateAdd(RegToInc, Const1i64);
-    generateStoreToReg(Reg, Val, Env.FuncName);
+    generateStoreToReg(*RegToStore, Val, Env.FuncName);
     auto *Cond = IB->CreateICmpEQ(Val, ImmToCmp);
 
     IB->CreateCondBr(Cond, Label1, Label2);
@@ -764,11 +774,11 @@ private:
     auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
 
     auto StructPtrReg = std::get<Register>(I.getArg(0));
-    auto *StructPtrI64 = generateRegID(StructPtrReg, Env.FuncName);
+    auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
     auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
     auto *ImmOff = llvm::ConstantInt::get(IB->getInt32Ty(), ImmOffVal);
     auto RegToCmp = std::get<Register>(I.getArg(2));
-    auto *ValCmpWith = generateRegID(RegToCmp, Env.FuncName);
+    auto *ValCmpWith = generateRegValueLoad(RegToCmp, Env.FuncName);
     auto Label1Name = std::get<Label>(I.getArg(3));
     assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
     auto *Label1 = Env.BBMap[Label1Name];
@@ -786,9 +796,8 @@ private:
   }
 
   void generateBrCond(Instruction &I, InstructionEnv &Env) {
-    
     auto CondReg = std::get<Register>(I.getArg(0));
-    auto *Cond = generateRegID(CondReg, Env.FuncName);
+    auto *Cond = generateRegValueLoad(CondReg, Env.FuncName);
     auto Label1Name = std::get<Label>(I.getArg(1));
     assert(Env.BBMap.find(Label1Name) != Env.BBMap.end());
     auto *Label1 = Env.BBMap[Label1Name];
@@ -896,15 +905,6 @@ class PseudoGenerator final : public ControlFlowGenerator {
   llvm::FunctionType *Func4Args_t = nullptr;
 
   constexpr static auto RegFileStep = 32u;
-
-  struct Dot {
-    uint64_t X;
-    uint64_t Y;
-    uint64_t GrowthSpeed;
-    long long GrowthDirection;
-    uint64_t R;
-    struct lib::RGB Colour;
-  };
   
   static uint64_t xorshift(uint64_t Seed) {
     Seed ^= Seed << 13;
@@ -1559,6 +1559,185 @@ public:
 uint64_t *PseudoGenerator::__TmpRegFilePtr = nullptr;
 uint64_t *PseudoGenerator::__ArgsRegFilePtr = nullptr;
 uint64_t *PseudoGenerator::__RetValuePtr = nullptr;
+
+class RealGenerator final : public ControlFlowGenerator {
+  void generateLoadDotFiled(Instruction &I, InstructionEnv Env) {
+    auto *Const0i64 = llvm::ConstantInt::get(IB->getInt64Ty(), 0); 
+
+    auto StructPtrReg = std::get<Register>(I.getArg(0));
+    auto *StructPtr = generateRegValueLoad(StructPtrReg, Env.FuncName);
+    auto ImmOffVal = std::get<Immidiate>(I.getArg(1));
+    auto *ImmOff = llvm::ConstantInt::get(IB->getInt64Ty(), ImmOffVal);
+    assert(I.getReturnValue());
+    auto ValReg = I.getReturnValue();
+
+    auto Values = std::vector<llvm::Value *>{Const0i64, ImmOff};
+    auto *Addr = IB->CreateInBoundsGEP(Dot_t, StructPtr, Values);
+    auto *Val = IB->CreateAlignedLoad(IB->getInt64Ty(), Addr, llvm::MaybeAlign{8});
+    generateStoreToReg(*ValReg, Val, Env.FuncName);
+  }
+
+  void generateStoreDotField(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateStoreDotFieldImm(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateGetDotAddr(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateInitRgb(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateLoadRgb(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateCmpTwo(Instruction &I, InstructionEnv Env) {
+   
+  }
+
+  void generateNorm(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateXorshift(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateCreateDots(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateAnd(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateCmpEqImm(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateCmpUGTImm(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateCmpUGT(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateLi(Instruction &I, InstructionEnv Env) {
+   
+  }
+
+  void generateMul(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateAdd(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateSub(Instruction &I, InstructionEnv Env) {
+  
+  }
+
+  void generateSelect(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateMv(Instruction &I, InstructionEnv Env) {
+    
+  }
+
+  void generateDataFlowInstruction(Instruction &I, InstructionEnv Env) override {
+    auto Name = I.getOpcode();
+    if (Name == "loadDotField") {
+      generateLoadDotFiled(I, Env);
+      return;
+    }
+    if (Name == "storeDotField") {
+      generateStoreDotField(I, Env);
+      return;
+    }
+    if (Name == "storeDotFieldImm") {
+      generateStoreDotFieldImm(I, Env);
+      return;
+    }
+    if (Name == "getDotAddr") {
+      generateGetDotAddr(I, Env);
+      return;
+    }
+    if (Name == "initRgb") {
+      generateInitRgb(I, Env);
+      return;
+    }
+    if (Name == "loadRgb") {
+      generateLoadRgb(I, Env);
+      return;
+    }
+    if (Name == "cmpTwo") {
+      generateCmpTwo(I, Env);
+      return;
+    }
+    if (Name == "norm") {
+      generateNorm(I, Env);
+      return;
+    }
+    if (Name == "xorshift") {
+      generateXorshift(I, Env);
+      return;
+    }
+    if (Name == "createDots") {
+      generateCreateDots(I, Env);
+      return;
+    }
+    if (Name == "and") {
+      generateAnd(I, Env);
+      return;
+    }
+    if (Name == "cmpEqImm") {
+      generateCmpEqImm(I, Env);
+      return;
+    }
+    if (Name == "cmpUGTImm") {
+      generateCmpUGTImm(I, Env);
+      return;
+    }
+    if (Name == "cmpUGT") {
+      generateCmpUGT(I, Env);
+      return;
+    }
+    if (Name == "li") {
+      generateLi(I, Env);
+      return;
+    }
+    if (Name == "mul") {
+      generateMul(I, Env);
+      return;
+    }
+    if (Name == "add") {
+      generateAdd(I, Env);
+      return;
+    }
+    if (Name == "sub") {
+      generateSub(I, Env);
+      return;
+    }
+    if (Name == "select") {
+      generateSelect(I, Env);
+      return;
+    }
+    if (Name == "mv") {
+      generateMv(I, Env);
+      return;
+    }
+    utils::reportFatalError("Unknown instruction:");
+  }
+};
 
 } // namespace IR
 
