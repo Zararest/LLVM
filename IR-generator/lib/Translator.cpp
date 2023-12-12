@@ -1640,8 +1640,9 @@ class RealGenerator final : public ControlFlowGenerator {
     
     auto StructPtrReg = std::get<Register>(I.getArg(0));
     auto *StructPtrI64 = generateRegValueLoad(StructPtrReg, Env.FuncName);
-    auto SeedReg = std::get<Register>(I.getArg(0));
-    auto *Seed = generateRegValueLoad(SeedReg, Env.FuncName);
+    auto SeedName = std::get<Label>(I.getArg(1));
+    assert(GVMap.find(SeedName) != GVMap.end());
+    auto *Seed = GVMap[SeedName];
     auto Args = std::vector<llvm::Value *>{Seed};
 
     auto *StructPtr = IB->CreateBitCast(StructPtrI64, llvm::PointerType::getUnqual(Dot_t));
@@ -1765,7 +1766,8 @@ class RealGenerator final : public ControlFlowGenerator {
     auto ValReg = *I.getReturnValue();
 
     auto *Val = IB->CreateICmpEQ(ValIn, Imm);
-    generateStoreToReg(ValReg, Val, Env.FuncName);
+    auto *ExtendedVal = IB->CreateZExt(Val, IB->getInt64Ty());
+    generateStoreToReg(ValReg, ExtendedVal, Env.FuncName);
   }
 
   void generateCmpUGTImm(Instruction &I, InstructionEnv Env) {
@@ -1777,7 +1779,8 @@ class RealGenerator final : public ControlFlowGenerator {
     auto ValReg = *I.getReturnValue();
 
     auto *Val = IB->CreateICmpUGT(ValIn, Imm);
-    generateStoreToReg(ValReg, Val, Env.FuncName);
+    auto *ExtendedVal = IB->CreateZExt(Val, IB->getInt64Ty());
+    generateStoreToReg(ValReg, ExtendedVal, Env.FuncName);
   }
 
   void generateCmpUGT(Instruction &I, InstructionEnv Env) {
@@ -1789,7 +1792,8 @@ class RealGenerator final : public ControlFlowGenerator {
     auto ValReg = *I.getReturnValue();
 
     auto *Val = IB->CreateICmpUGT(ValLhs, ValRhs);
-    generateStoreToReg(ValReg, Val, Env.FuncName);
+    auto *ExtendedVal = IB->CreateZExt(Val, IB->getInt64Ty());
+    generateStoreToReg(ValReg, ExtendedVal, Env.FuncName);
   }
 
   void generateLi(Instruction &I, InstructionEnv Env) {
@@ -2008,14 +2012,14 @@ public:
     __ArgsRegFilePtr = ArgsRegFile.get();
     __RetValuePtr = RetValue.get();
     auto Mapper = 
-      [TmpRegFile = __TmpRegFilePtr,
+      [TmpRegFilePtr = __TmpRegFilePtr,
        ArgsRegFilePtr = __ArgsRegFilePtr, 
        RetValuePtr = __RetValuePtr](const std::string &Name) -> void * {
         std::cout << "Mapping {" << Name << "}\n";
         if (Name == "argRegFile")
           return ArgsRegFilePtr;
         if (Name == "tmpRegFile")
-          return TmpRegFile;
+          return TmpRegFilePtr;
         if (Name == "retValReg")
           return RetValuePtr;
         if (Name == "simFlush")
