@@ -176,4 +176,4 @@ BB2:
   mv t0 -> a0
   call drawFrame
   call simFlush
-  incJump t1, 1, BB1, BB2 -> t1
+  incJump t1, 10, BB1, BB2 -> t1

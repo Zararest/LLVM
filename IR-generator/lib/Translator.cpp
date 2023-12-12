@@ -1401,7 +1401,7 @@ class PseudoGenerator final : public ControlFlowGenerator {
     Count++;
     //std::cout << "\tgetDotAddr " << Count << std::endl;
     //std::cout << "\t\tcounter: " << getRegVal(VallOff) << "\n\n";
-    auto *StructPtrVal = reinterpret_cast<uint64_t *>(getRegVal(StructPtr));
+    auto *StructPtrVal = reinterpret_cast<Dot *>(getRegVal(StructPtr));
     assert(StructPtrVal);
     getRegVal(Addr) = reinterpret_cast<uint64_t>(StructPtrVal + getRegVal(VallOff));
   }

@@ -48,7 +48,7 @@ void simFlush()
     SDL_RenderPresent(Renderer);
 }
 
-void simPutPixel(int x, int y, struct RGB rgb)
+void simPutPixel(long long x, long long y, struct RGB rgb)
 {
     assert(0 <= x && x < SIM_X_SIZE && "Out of range");
     assert(0 <= y && y < SIM_Y_SIZE && "Out of range");

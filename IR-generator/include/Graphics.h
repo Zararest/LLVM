@@ -12,7 +12,7 @@ struct RGB {
 };
 
 void simFlush();
-void simPutPixel(int x, int y, struct RGB rgb);
+void simPutPixel(long long x, long long y, struct RGB rgb);
 int simRand();
 
 void simInit();
