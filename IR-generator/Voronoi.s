@@ -11,10 +11,10 @@ ENTRY:
   storeDotFieldImm a0, 2, 5
   storeDotFieldImm a0, 3, 1
   xorshift Seed -> t0
-  and t0, 63 -> t0
+  and t0, 255 -> t0
   storeDotField a0, 0, t0
   xorshift Seed -> t1
-  and t1, 63 -> t1  
+  and t1, 255 -> t1  
   storeDotField a0, 1, t1
   initRgb a0, Seed
   ret
@@ -122,7 +122,7 @@ BB1:
 BB2:
   ret
 BB3:
-  incJump t0, 64, BB2, BB1 -> t0
+  incJump t0, 256, BB2, BB1 -> t0
 BB4:
   #спил регистров#
   mv a0 -> t1
@@ -144,7 +144,7 @@ BB6:
   mv t4 -> a2
   call simPutPixel
   mv t5 -> a0
-  incJump t2, 64, BB3, BB4 -> t2
+  incJump t2, 256, BB3, BB4 -> t2
 
 
 <initDots>

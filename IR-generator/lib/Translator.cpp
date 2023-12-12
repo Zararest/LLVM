@@ -530,7 +530,7 @@ struct Dot {
   uint64_t X;
   uint64_t Y;
   uint64_t GrowthSpeed;
-  long long GrowthDirection;
+  int64_t GrowthDirection;
   uint64_t R;
   struct lib::RGB Colour;
 };
@@ -805,7 +805,8 @@ private:
     assert(Env.BBMap.find(Label2Name) != Env.BBMap.end());
     auto *Label2 = Env.BBMap[Label2Name];
 
-    IB->CreateCondBr(Cond, Label1, Label2);
+    auto *TruncatedCond = IB->CreateTrunc(Cond, IB->getInt1Ty());
+    IB->CreateCondBr(TruncatedCond, Label1, Label2);
   }
 
   void generateBr(Instruction &I, InstructionEnv &Env) {
@@ -1699,7 +1700,8 @@ class RealGenerator final : public ControlFlowGenerator {
     auto *Icmp1 = IB->CreateICmpULT(ValCmpWith, Val1);
     auto *Icmp2 = IB->CreateICmpULT(ValCmpWith, Val2);
     auto *Val = IB->CreateAnd(Icmp1, Icmp2);
-    generateStoreToReg(ValReg, Val, Env.FuncName);
+    auto *ExtendedVal = IB->CreateZExt(Val, IB->getInt64Ty());
+    generateStoreToReg(ValReg, ExtendedVal, Env.FuncName);
   }
 
   void generateNorm(Instruction &I, InstructionEnv Env) {
@@ -1851,8 +1853,8 @@ class RealGenerator final : public ControlFlowGenerator {
     assert(I.getReturnValue());
     auto ValReg = *I.getReturnValue();
     
-    auto *Bitcast = IB->CreateBitCast(Cond, IB->getInt1Ty());
-    auto *Val = IB->CreateSelect(Bitcast, ValIn1, ValIn2);
+    auto *TruncatedCond = IB->CreateTrunc(Cond, IB->getInt1Ty());
+    auto *Val = IB->CreateSelect(TruncatedCond, ValIn1, ValIn2);
     generateStoreToReg(ValReg, Val, Env.FuncName);
   }
 
@@ -2004,9 +2006,9 @@ public:
   std::pair<IRToExecute::Mapping_t, IRToExecute::RegisterState> generateMapper() override {
     assert(FuncToRegFileMap.size());
     auto GeneralTmpRegFileSize = FuncToRegFileMap.size() * TmpRegFileSize;
+    auto TmpRegFile = std::make_unique<uint64_t[]>(GeneralTmpRegFileSize);
     auto ArgsRegFile = std::make_unique<uint64_t[]>(ArgsRegFileSize);
     auto RetValue = std::make_unique<uint64_t[]>(1);
-    auto TmpRegFile = std::make_unique<uint64_t[]>(TmpRegFileSize);
     
     __TmpRegFilePtr = TmpRegFile.get();
     __ArgsRegFilePtr = ArgsRegFile.get();
