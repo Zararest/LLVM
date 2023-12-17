@@ -1684,7 +1684,8 @@ class RealGenerator final : public ControlFlowGenerator {
     auto *Val = 
       IB->CreateAlignedLoad(llvm::PointerType::getUnqual(Int24_t), 
                             Bitcast, llvm::MaybeAlign{8});
-    generateStoreToReg(ValReg, Val, Env.FuncName);
+    auto *ExtendedVal = IB->CreateZExt(Val, IB->getInt64Ty());
+    generateStoreToReg(ValReg, ExtendedVal, Env.FuncName);
   }
 
   void generateCmpTwo(Instruction &I, InstructionEnv Env) {

@@ -1,3 +1,17 @@
+# Overview
+
+- Voronoi-IR - target for generating LLVM IR for Voronoi app.
+It is executed with LLVM execution engine and external graphic lib calls.
+
+- Assembler - target for assembler processing.
+`Voromoi.s` - is an example of programm written with my own ISA, which is presented below.
+`Translator.cpp` contains parser which makes my IR from assembler and then emites LLVM IR.
+For more information use `./Assembler --help`
+
+Excample of execution of my assembler with the help of LLVM execution engine:
+
+![img](img/Voronoi-diagram.png)
+
 # Ручная генерация IR
 В файле `handmade-IR` находится llvm-IR сгенерированный руками и результат исполнения на симуляторе.
 
